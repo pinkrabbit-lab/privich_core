@@ -6,36 +6,51 @@
     <title>Retro Chat Room</title>
     <style>
         body { font-family: monospace; background: #242424; color: #3a7ecc; margin: 0; padding: 10px; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 800px; background: #111; padding: 15px; border: 2px solid #3a7ecc; border-radius: 5px; box-shadow: 0 0 15px rgba(136, 198, 255, 0.2); box-sizing: border-box; }
+        
+        /* Убрали внешнюю рамку, border и box-shadow */
+        .container { width: 100%; max-width: 800px; background: #111; padding: 15px; box-sizing: border-box; }
+        
         #login-screen, #chat-screen { display: none; }
         .active { display: block !important; }
         
-        /* Элементы ввода */
-        input, select, button { background: #1a1a1a; color: #3a7ecc; border: 1px solid #3a7ecc; padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; font-family: monospace; font-size: 1rem; }
+        /* Элементы ввода со скруглением в 4 пикселя */
+        input, select, button { background: #1a1a1a; color: #3a7ecc; border: 1px solid #3a7ecc; padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; font-family: monospace; font-size: 1rem; border-radius: 4px; }
         button:hover { background: #3a7ecc; color: #242424; cursor: pointer; font-weight: bold; }
         
         /* Шапка с вкладками комнат */
         .chat-header { border-bottom: 1px solid #3a7ecc; padding-bottom: 10px; margin-bottom: 10px; }
         .room-tabs { display: flex; gap: 5px; overflow-x: auto; margin-top: 5px; padding-bottom: 5px; }
-        .tab-btn { width: auto; flex-grow: 1; padding: 6px 12px; margin: 0; font-size: 0.85rem; white-space: nowrap; background: #242424; border-color: #19395e; color: #4a8bd4; }
+        .tab-btn { width: auto; flex-grow: 1; padding: 6px 12px; margin: 0; font-size: 0.85rem; white-space: nowrap; background: #1a1a1a; border-color: #19395e; color: #4a8bd4; border-radius: 4px; }
         .tab-btn.active-tab { background: #3a7ecc; color: #242424; border-color: #3a7ecc; font-weight: bold; }
         
-        /* Окно сообщений */
-        #chat-window { height: 50vh; min-height: 200px; border: 1px solid #3a7ecc; overflow-y: auto; padding: 10px; background: #242424; margin-bottom: 10px; display: flex; flex-direction: column; box-sizing: border-box; }
-        .msg { margin-bottom: 10px; line-height: 1.4; word-break: break-all; font-size: 1.05rem; }
-        .time { color: #535353; font-size: 0.75rem; margin-left: 8px; }
-        .system { color: #ffaa00; font-style: italic; }
+        /* Окно сообщений со скруглением */
+        #chat-window { height: 50vh; min-height: 200px; border: 1px solid #3a7ecc; overflow-y: auto; padding: 10px; background: #161616; margin-bottom: 10px; display: flex; flex-direction: column; box-sizing: border-box; border-radius: 4px; }
         
-        /* Нижняя панель управления: теперь поле ввода и кнопка идут в один ряд */
+        /* Обводка каждого отдельного сообщения */
+        .msg { 
+            margin-bottom: 8px; 
+            line-height: 1.4; 
+            word-break: break-all; 
+            font-size: 1.05rem; 
+            padding: 8px 12px; 
+            background: #202020; 
+            border: 1px solid #2a2a2a; 
+            border-radius: 4px; 
+        }
+        
+        .time { color: #535353; font-size: 0.75rem; margin-left: 8px; float: right; line-height: 1.5rem; }
+        .system { color: #ffaa00; font-style: italic; border: none; background: transparent; }
+        
+        /* Нижняя панель управления */
         .controls { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
-        .controls input { margin: 0; padding: 12px; flex-grow: 1; }
+        .controls input { margin: 0; padding: 12px; flex-grow: 1; border-radius: 4px; }
         
-        /* Квадратная кнопка отправки */
-        .send-btn { width: 50px; height: 46px; min-width: 50px; margin: 0; padding: 0; font-size: 1.1rem; background: #224b7a; border-width: 2px; display: flex; align-items: center; justify-content: center; }
+        /* Квадратная кнопка отправки со скруглением */
+        .send-btn { width: 50px; height: 46px; min-width: 50px; margin: 0; padding: 0; font-size: 1.1rem; background: #224b7a; border-width: 2px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
         
-        /* Маленькая сервисная строчка в самом низу, выровненная по левому краю */
+        /* Сервисная кнопка внизу */
         .footer-controls { display: flex; justify-content: flex-start; margin-top: 15px; }
-        .clear-btn { width: auto; margin: 0; padding: 4px 8px; font-size: 0.75rem; border-color: #550000; color: #ff3333; background: transparent; }
+        .clear-btn { width: auto; margin: 0; padding: 4px 8px; font-size: 0.75rem; border-color: #550000; color: #ff3333; background: transparent; border-radius: 4px; }
         .clear-btn:hover { background: #ff3333; color: #242424; border-color: #ff3333; }
     </style>
 </head>
@@ -53,7 +68,6 @@
     <div id="chat-screen">
         <div class="chat-header">
             <div style="font-size: 0.9rem;" id="user-info">Вы: -</div>
-            <!-- Вкладки комнат -->
             <div class="room-tabs">
                 <button class="tab-btn" id="tab-general" onclick="switchRoom('general')">1</button>
                 <button class="tab-btn" id="tab-emergency" onclick="switchRoom('emergency')">2</button>
@@ -65,7 +79,6 @@
         
         <div class="controls">
             <input type="text" id="message-input" placeholder="Введите сообщение..." onkeypress="handleKeyPress(event)">
-            <!-- Вместо длинного слова используем стрелочку или символ отправки, чтобы кнопка оставалась аккуратным квадратом -->
             <button class="send-btn" onclick="sendMessage()">➔</button>
         </div>
         
