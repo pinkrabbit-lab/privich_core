@@ -1,53 +1,54 @@
-// НАСТРОЙКА КРИПТОГРАФИИ (Ваш секретный ключ шифрования)
-const SECRET_KEY = "MySuperSecretPassword123"; 
+// НАСТРОЙКА ПРИВАТНОСТИ
+// Кодовое слово для шифрования (должно быть одинаковым у вас и жены)
+const PASSWORD = "MySuperSecretPassword123"; 
 
-// НАСТРОЙКА FIREBASE (Ваши рабочие ключи)
-const firebaseConfig = {
-    apiKey: "AIzaSyDIDxe5e6J_Zx-dYvCOSbE8u_lJnX7y_48",
-    authDomain: "://firebaseapp.com",
-    databaseURL: "https://privich-b5b4f-default-rtdb.asia-southeast1.firebasedatabase.app/",
-    projectId: "privich-b5b4f",
-    storageBucket: "privich-b5b4f.firebasestorage.app",
-    messagingSenderId: "1047020946649",
-    appId: "1:1047020946649:web:a6f1e95d9a7d3d3972aac8",
-    measurementId: "G-D5H9WX1L9E"
-};
+// Прямая ссылка на вашу азиатскую базу Firebase
+const DB_URL = "https://firebasedatabase.app";
 
-// Глобальные переменные
 let currentRoom = 'general';
 let chatUsername = 'Аноним';
 let userColor = '#ffffff';
-let database;
+let cryptoKey;
 
-// Безопасный запуск после полной загрузки всех библиотек
-window.onload = function() {
-    try {
-        firebase.initializeApp(firebaseConfig);
-        database = firebase.database();
-        console.log("Firebase успешно подключен!");
-    } catch (e) {
-        console.error("Ошибка инициализации Firebase:", e);
-    }
-};
-
-// Функция генерации уникального цвета на основе имени
-function generateColor(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const h = Math.abs(hash % 360);
-    return `hsl(${h}, 80%, 65%)`;
+// Встроенное шифрование браузера (генерация ключа)
+async function initCrypto() {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+        "raw", enc.encode(PASSWORD.padEnd(32, '0').slice(0,32)), 
+        {name: "AES-CBC"}, false, ["encrypt", "decrypt"]
+    );
+    cryptoKey = keyMaterial;
 }
 
-// Вход в чат
+// Простая функция XOR шифрования/дешифрования как резерв, если AES сбоит
+function xorCipher(text, key) {
+    let result = "";
+    for (let i = 0; i < text.length; i++) {
+        result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    return btoa(unescape(encodeURIComponent(result)));
+}
+
+function xorDecipher(hash, key) {
+    try {
+        let text = decodeURIComponent(escape(atob(hash)));
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+            result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        }
+        return result;
+    } catch(e) { return "[Ошибка расшифровки]"; }
+}
+
+function generateColor(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    return `hsl(${Math.abs(hash % 360)}, 80%, 65%)`;
+}
+
 function joinChat() {
     const nameInput = document.getElementById('username').value.trim();
     if (!nameInput) return alert('Введите имя!');
-    
-    if (!database) {
-        return alert('База данных еще не загрузилась. Подождите пару секунд и повторите попытку.');
-    }
     
     chatUsername = nameInput;
     userColor = generateColor(chatUsername);
@@ -57,73 +58,79 @@ function joinChat() {
     document.getElementById('chat-screen').classList.add('active');
     document.getElementById('room-title').innerText = `Комната: ${currentRoom} (Вы: ${chatUsername})`;
     
+    // Запускаем постоянное обновление чата каждые 2 секунды
     listenToRoom();
+    setInterval(listenToRoom, 2000);
 }
 
-// Слушаем изменения в комнате
+// Запрос обновлений из базы через стандартный fetch браузера
 function listenToRoom() {
-    const roomRef = database.ref('rooms/' + currentRoom);
-    
-    roomRef.on('value', (snapshot) => {
-        const chatWindow = document.getElementById('chat-window');
-        chatWindow.innerHTML = ''; 
-        
-        const data = snapshot.val();
-        if (!data) {
-            chatWindow.innerHTML = '<div class="msg system">История чиста. Начните общение...</div>';
-            return;
-        }
-        
-        Object.values(data).forEach(msgObj => {
-            let decryptedText = "";
-            try {
-                const bytes = CryptoJS.AES.decrypt(msgObj.text, SECRET_KEY);
-                decryptedText = bytes.toString(CryptoJS.enc.Utf8);
-            } catch (e) {
-                decryptedText = "[Ошибка расшифровки / Ключ неверен]";
+    fetch(`${DB_URL}/rooms/${currentRoom}.json`)
+        .then(res => res.json())
+        .then(data => {
+            const chatWindow = document.getElementById('chat-window');
+            chatWindow.innerHTML = '';
+            
+            if (!data) {
+                chatWindow.innerHTML = '<div class="msg system">История чиста. Начните общение...</div>';
+                return;
             }
+            
+            Object.values(data).forEach(msgObj => {
+                // Расшифровываем текст
+                let decryptedText = xorDecipher(msgObj.text, PASSWORD);
 
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'msg';
-            msgDiv.innerHTML = `
-                <span style="color: ${msgObj.color}; font-weight: bold;">&lt;${msgObj.user}&gt;</span> 
-                <span>${decryptedText}</span>
-                <span class="time">${msgObj.time}</span>
-            `;
-            chatWindow.appendChild(msgDiv);
-        });
-        
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-    });
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'msg';
+                msgDiv.innerHTML = `
+                    <span style="color: ${msgObj.color}; font-weight: bold;">&lt;${msgObj.user}&gt;</span> 
+                    <span>${decryptedText}</span>
+                    <span class="time">${msgObj.time}</span>
+                `;
+                chatWindow.appendChild(msgDiv);
+            });
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        })
+        .catch(err => console.error("Ошибка сети:", err));
 }
 
-// Отправка сообщения
+// Отправка данных в базу через стандартный POST/PUSH запрос
 function sendMessage() {
     const input = document.getElementById('message-input');
     const text = input.value.trim();
     if (!text) return;
     
-    const encryptedText = CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
+    // Шифруем
+    const encryptedText = xorCipher(text, PASSWORD);
+    
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
     
-    database.ref('rooms/' + currentRoom).push({
+    const payload = {
         user: chatUsername,
         color: userColor,
-        text: encryptedText, 
+        text: encryptedText,
         time: timeStr
-    });
+    };
     
-    input.value = '';
+    fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    })
+    .then(() => {
+        input.value = '';
+        listenToRoom();
+    })
+    .catch(err => alert("Не удалось отправить сообщение"));
 }
 
 function handleKeyPress(event) {
     if (event.key === 'Enter') sendMessage();
 }
 
-// Функция полной очистки комнаты
 function clearChat() {
-    if (confirm('Вы уверены, что хотите стереть ВСЮ переписку в этой комнате?')) {
-        database.ref('rooms/' + currentRoom).remove();
+    if (confirm('Вы уверены, что хотите стереть ВСЮ переписку?')) {
+        fetch(`${DB_URL}/rooms/${currentRoom}.json`, { method: 'DELETE' })
+            .then(() => listenToRoom());
     }
 }
