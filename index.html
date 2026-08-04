@@ -5,26 +5,63 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Retro Chat Room</title>
     <style>
-        body { font-family: monospace; background: #242424; color: #3a7ecc; margin: 0; padding: 10px; display: flex; justify-content: center; }
+        /* Базовые настройки страницы */
+        html, body { height: 100dvh; margin: 0; padding: 0; background: #323339; overflow: hidden; }
+        body { font-family: monospace; color: #f0f0f0; display: flex; justify-content: center; align-items: center; }
         
-        /* Убрали внешнюю рамку, border и box-shadow */
-        .container { width: 100%; max-width: 800px; background: #111; padding: 15px; box-sizing: border-box; }
+        /* УНИВЕРСАЛЬНЫЙ КОНТЕЙНЕР (Для ПК) */
+        .container { 
+            width: 100%; 
+            max-width: 800px; 
+            height: 90dvh; /* На ПК чат занимает 90% высоты экрана */
+            background: #2c2d32; 
+            padding: 15px; 
+            box-sizing: border-box; 
+            display: flex;
+            flex-direction: column;
+            border-radius: 6px;
+            border: 1px solid #19395e;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
         
-        #login-screen, #chat-screen { display: none; }
-        .active { display: block !important; }
+        /* Жесткое управление видимостью экранов */
+        #login-screen, #chat-screen { display: none; width: 100%; box-sizing: border-box; }
         
-        /* Элементы ввода со скруглением в 4 пикселя */
-        input, select, button { background: #1a1a1a; color: #3a7ecc; border: 1px solid #3a7ecc; padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; font-family: monospace; font-size: 1rem; border-radius: 4px; }
-        button:hover { background: #3a7ecc; color: #242424; cursor: pointer; font-weight: bold; }
+        #login-screen { padding-top: 15dvh; flex-direction: column; }
+        
+        /* Экран чата работает как флекс-контейнер во всю высоту родителя */
+        #chat-screen { 
+            flex-direction: column; 
+            height: 100%; 
+        }
+        
+        /* Класс .active переключает дисплей без !important конфликтов */
+        #login-screen.active { display: flex; }
+        #chat-screen.active { display: flex; }
+        
+        /* Элементы ввода */
+        input, select, button { background: #323339; color: #f0f0f0; border: 1px solid #3a7ecc; padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; font-family: monospace; font-size: 1rem; border-radius: 4px; }
+        button:hover { background: #3a7ecc; color: #323339; cursor: pointer; font-weight: bold; }
         
         /* Шапка с вкладками комнат */
-        .chat-header { border-bottom: 1px solid #3a7ecc; padding-bottom: 10px; margin-bottom: 10px; }
+        .chat-header { border-bottom: 1px solid #3a7ecc; padding-bottom: 10px; margin-bottom: 10px; flex-shrink: 0; }
         .room-tabs { display: flex; gap: 5px; overflow-x: auto; margin-top: 5px; padding-bottom: 5px; }
-        .tab-btn { width: auto; flex-grow: 1; padding: 6px 12px; margin: 0; font-size: 0.85rem; white-space: nowrap; background: #1a1a1a; border-color: #19395e; color: #4a8bd4; border-radius: 4px; }
-        .tab-btn.active-tab { background: #3a7ecc; color: #242424; border-color: #3a7ecc; font-weight: bold; }
+        .tab-btn { width: auto; flex-grow: 1; padding: 6px 12px; margin: 0; font-size: 0.85rem; white-space: nowrap; background: #323339; border-color: #19395e; color: #4a8bd4; border-radius: 4px; }
+        .tab-btn.active-tab { background: #3a7ecc; color: #323339; border-color: #3a7ecc; font-weight: bold; }
         
-        /* Окно сообщений со скруглением */
-        #chat-window { height: 50vh; min-height: 200px; border: 1px solid #3a7ecc; overflow-y: auto; padding: 10px; background: #161616; margin-bottom: 10px; display: flex; flex-direction: column; box-sizing: border-box; border-radius: 4px; }
+        /* ОКНО СООБЩЕНИЙ: строго забирает ВСЁ свободное место */
+        #chat-window { 
+            flex-grow: 1; 
+            border: 1px solid #3a7ecc; 
+            overflow-y: auto; 
+            padding: 10px; 
+            background: #323339; 
+            margin-bottom: 10px; 
+            display: flex; 
+            flex-direction: column; 
+            box-sizing: border-box; 
+            border-radius: 4px; 
+        }
         
         /* Обводка каждого отдельного сообщения */
         .msg { 
@@ -33,25 +70,39 @@
             word-break: break-all; 
             font-size: 1.05rem; 
             padding: 8px 12px; 
-            background: #202020; 
-            border: 1px solid #2a2a2a; 
+            background: #3e3f45; 
+            border: 1px solid #6e6e6e; 
             border-radius: 4px; 
+            flex-shrink: 0;
+            color: #f0f0f0;
         }
         
-        .time { color: #535353; font-size: 0.75rem; margin-left: 8px; float: right; line-height: 1.5rem; }
+        .time { color: #797979; font-size: 0.75rem; margin-left: 8px; float: right; line-height: 1.5rem; }
         .system { color: #ffaa00; font-style: italic; border: none; background: transparent; }
         
         /* Нижняя панель управления */
-        .controls { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+        .controls { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-shrink: 0; }
         .controls input { margin: 0; padding: 12px; flex-grow: 1; border-radius: 4px; }
         
-        /* Квадратная кнопка отправки со скруглением */
+        /* Квадратная кнопка отправки */
         .send-btn { width: 50px; height: 46px; min-width: 50px; margin: 0; padding: 0; font-size: 1.1rem; background: #224b7a; border-width: 2px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
         
         /* Сервисная кнопка внизу */
-        .footer-controls { display: flex; justify-content: flex-start; margin-top: 15px; }
+        .footer-controls { display: flex; justify-content: flex-start; margin-top: 5px; margin-bottom: 5px; flex-shrink: 0; }
         .clear-btn { width: auto; margin: 0; padding: 4px 8px; font-size: 0.75rem; border-color: #550000; color: #ff3333; background: transparent; border-radius: 4px; }
-        .clear-btn:hover { background: #ff3333; color: #242424; border-color: #ff3333; }
+        .clear-btn:hover { background: #ff3333; color: #323339; border-color: #ff3333; }
+
+        /* УМНЫЙ МЕДИА-ЗАПРОС ДЛЯ СМАРТФОНОВ */
+        @media (max-width: 768px) {
+            body { padding: 0; align-items: stretch; }
+            .container { 
+                height: 100dvh; 
+                border: none; 
+                border-radius: 0; 
+                box-shadow: none; 
+            }
+            #login-screen { padding-top: 20dvh; padding-left: 15px; padding-right: 15px; }
+        }
     </style>
 </head>
 <body>
@@ -59,7 +110,7 @@
 <div class="container">
     <!-- ЭКРАН ВХОДА -->
     <div id="login-screen" class="active">
-        <h2 style="text-align: center; text-transform: uppercase; letter-spacing: 2px;">Введите Ник</h2>
+        <h2 style="text-align: center; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px;">Введите Ник</h2>
         <input type="text" id="username" placeholder="Ваше имя / Ник" maxlength="15">
         <button onclick="joinChat()">Подключиться</button>
     </div>
