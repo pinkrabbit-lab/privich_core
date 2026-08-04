@@ -7,7 +7,7 @@ const SECRET_KEY = "MySuperSecretPassword123";
 const firebaseConfig = {
     apiKey: "AIzaSyDIDxe5e6J_Zx-dYvCOSbE8u_lJnX7y_48",
     authDomain: "privich-b5b4f.firebaseapp.com",
-    databaseURL: "https://firebaseio.com", // Сюда нужно добавить эту строку
+    databaseURL: "https://privich-b5b4f-default-rtdb.firebaseio.com",
     projectId: "privich-b5b4f",
     storageBucket: "privich-b5b4f.firebasestorage.app",
     messagingSenderId: "1047020946649",
