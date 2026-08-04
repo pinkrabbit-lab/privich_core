@@ -1,10 +1,10 @@
-// НАСТРОЙКА КРИПТОГРАФИИ
+// НАСТРОЙКА КРИПТОГРАФИИ (Ваш секретный ключ шифрования)
 const SECRET_KEY = "MySuperSecretPassword123"; 
 
-// НАСТРОЙКА FIREBASE (Ваши актуальные ключи)
+// НАСТРОЙКА FIREBASE (Ваши рабочие ключи)
 const firebaseConfig = {
     apiKey: "AIzaSyDIDxe5e6J_Zx-dYvCOSbE8u_lJnX7y_48",
-    authDomain: "privich-b5b4f.firebaseapp.com",
+    authDomain: "://firebaseapp.com",
     databaseURL: "https://firebaseio.com",
     projectId: "privich-b5b4f",
     storageBucket: "privich-b5b4f.firebasestorage.app",
@@ -13,14 +13,22 @@ const firebaseConfig = {
     measurementId: "G-D5H9WX1L9E"
 };
 
-// Глобальные переменные чата
+// Глобальные переменные
 let currentRoom = 'general';
-let chatUsername = 'Аноним'; // Изменили имя переменной, чтобы избежать конфликтов с ID элементов html
+let chatUsername = 'Аноним';
 let userColor = '#ffffff';
+let database;
 
-// Инициализация Firebase
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+// Безопасный запуск после полной загрузки всех библиотек
+window.onload = function() {
+    try {
+        firebase.initializeApp(firebaseConfig);
+        database = firebase.database();
+        console.log("Firebase успешно подключен!");
+    } catch (e) {
+        console.error("Ошибка инициализации Firebase:", e);
+    }
+};
 
 // Функция генерации уникального цвета на основе имени
 function generateColor(str) {
@@ -36,6 +44,10 @@ function generateColor(str) {
 function joinChat() {
     const nameInput = document.getElementById('username').value.trim();
     if (!nameInput) return alert('Введите имя!');
+    
+    if (!database) {
+        return alert('База данных еще не загрузилась. Подождите пару секунд и повторите попытку.');
+    }
     
     chatUsername = nameInput;
     userColor = generateColor(chatUsername);
