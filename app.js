@@ -1,13 +1,11 @@
 // НАСТРОЙКА КРИПТОГРАФИИ
-// Измените этот ключ на свой собственный секретный пароль!
 const SECRET_KEY = "MySuperSecretPassword123"; 
 
-// НАСТРОЙКА FIREBASE
-// Замените этот конфиг на данные из вашего аккаунта Firebase Console
+// НАСТРОЙКА FIREBASE (Ваши актуальные ключи)
 const firebaseConfig = {
     apiKey: "AIzaSyDIDxe5e6J_Zx-dYvCOSbE8u_lJnX7y_48",
     authDomain: "privich-b5b4f.firebaseapp.com",
-    databaseURL: "https://privich-b5b4f-default-rtdb.firebaseio.com",
+    databaseURL: "https://firebaseio.com",
     projectId: "privich-b5b4f",
     storageBucket: "privich-b5b4f.firebasestorage.app",
     messagingSenderId: "1047020946649",
@@ -15,21 +13,21 @@ const firebaseConfig = {
     measurementId: "G-D5H9WX1L9E"
 };
 
-// Инициализация
+// Глобальные переменные чата
+let currentRoom = 'general';
+let chatUsername = 'Аноним'; // Изменили имя переменной, чтобы избежать конфликтов с ID элементов html
+let userColor = '#ffffff';
+
+// Инициализация Firebase
 firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 
-let currentRoom = 'general';
-let username = 'Аноним';
-let userColor = '#ffffff';
-
-// Функция генерации уникального цвета на основе строки (имени)
+// Функция генерации уникального цвета на основе имени
 function generateColor(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
-    // Генерируем сочные цвета, избегая слишком темных для черного фона
     const h = Math.abs(hash % 360);
     return `hsl(${h}, 80%, 65%)`;
 }
@@ -39,15 +37,14 @@ function joinChat() {
     const nameInput = document.getElementById('username').value.trim();
     if (!nameInput) return alert('Введите имя!');
     
-    username = nameInput;
-    userColor = generateColor(username);
+    chatUsername = nameInput;
+    userColor = generateColor(chatUsername);
     currentRoom = document.getElementById('room-select').value;
     
     document.getElementById('login-screen').classList.remove('active');
     document.getElementById('chat-screen').classList.add('active');
-    document.getElementById('room-title').innerText = `Комната: ${currentRoom} (Вы: ${username})`;
+    document.getElementById('room-title').innerText = `Комната: ${currentRoom} (Вы: ${chatUsername})`;
     
-    // Подключаемся к прослушиванию выбранной комнаты в Firebase
     listenToRoom();
 }
 
@@ -57,7 +54,7 @@ function listenToRoom() {
     
     roomRef.on('value', (snapshot) => {
         const chatWindow = document.getElementById('chat-window');
-        chatWindow.innerHTML = ''; // Очищаем экран перед перерисовкой
+        chatWindow.innerHTML = ''; 
         
         const data = snapshot.val();
         if (!data) {
@@ -65,9 +62,7 @@ function listenToRoom() {
             return;
         }
         
-        // Рендерим сообщения
         Object.values(data).forEach(msgObj => {
-            // Расшифровываем текст сообщения прямо в браузере
             let decryptedText = "";
             try {
                 const bytes = CryptoJS.AES.decrypt(msgObj.text, SECRET_KEY);
@@ -78,8 +73,6 @@ function listenToRoom() {
 
             const msgDiv = document.createElement('div');
             msgDiv.className = 'msg';
-            
-            // Собираем структуру: <Ник (цветной)> текст [время]
             msgDiv.innerHTML = `
                 <span style="color: ${msgObj.color}; font-weight: bold;">&lt;${msgObj.user}&gt;</span> 
                 <span>${decryptedText}</span>
@@ -88,7 +81,6 @@ function listenToRoom() {
             chatWindow.appendChild(msgDiv);
         });
         
-        // Автоскролл вниз при новом сообщении
         chatWindow.scrollTop = chatWindow.scrollHeight;
     });
 }
@@ -99,17 +91,14 @@ function sendMessage() {
     const text = input.value.trim();
     if (!text) return;
     
-    // Шифруем текст сообщения перед отправкой на сервер
     const encryptedText = CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-    
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
     
-    // Записываем структуру в Firebase
     database.ref('rooms/' + currentRoom).push({
-        user: username,
+        user: chatUsername,
         color: userColor,
-        text: encryptedText, // В облако улетает "каша" из букв
+        text: encryptedText, 
         time: timeStr
     });
     
@@ -120,7 +109,7 @@ function handleKeyPress(event) {
     if (event.key === 'Enter') sendMessage();
 }
 
-// Функция полной очистки комнаты для обоих собеседников
+// Функция полной очистки комнаты
 function clearChat() {
     if (confirm('Вы уверены, что хотите стереть ВСЮ переписку в этой комнате?')) {
         database.ref('rooms/' + currentRoom).remove();
