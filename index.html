@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Chat Room</title>
+    <!-- Подключаем Firebase и библиотеку шифрования CryptoJS -->
+    <script src="https://gstatic.com"></script>
+    <script src="https://gstatic.com"></script>
+    <script src="https://cloudflare.com"></script>
+    <style>
+        body { font-family: monospace; background: #121212; color: #00ff00; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #1a1a1a; padding: 20px; border: 1px solid #333; border-radius: 5px; }
+        #login-screen, #chat-screen { display: none; }
+        .active { display: block !important; }
+        input, select, button { background: #222; color: #00ff00; border: 1px solid #00ff00; padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; font-family: monospace; }
+        button:hover { background: #00ff00; color: #121212; cursor: pointer; }
+        #chat-window { height: 400px; border: 1px solid #333; overflow-y: auto; padding: 10px; background: #0a0a0a; margin-bottom: 10px; display: flex; flex-direction: column; }
+        .msg { margin-bottom: 8px; line-height: 1.4; word-break: break-all; }
+        .time { color: #555; font-size: 0.8em; margin-left: 8px; }
+        .system { color: #ffaa00; font-style: italic; }
+        .controls { display: flex; gap: 10px; }
+        .controls input { flex-grow: 1; }
+        .controls button { width: auto; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- ЭКРАН ВХОДА -->
+    <div id="login-screen" class="active">
+        <h2>Войти в комнату</h2>
+        <input type="text" id="username" placeholder="Ваше имя / Ник" maxlength="15">
+        <select id="room-select">
+            <option value="general">Комната 1: Основная</option>
+            <option value="emergency">Комната 2: Экстренная</option>
+            <option value="secret">Комната 3: Секретная</option>
+        </select>
+        <button onclick="joinChat()">Войти</button>
+    </div>
+
+    <!-- ЭКРАН ЧАТА -->
+    <div id="chat-screen">
+        <h3 id="room-title">Комната: </h3>
+        <div id="chat-window"></div>
+        <div class="controls">
+            <input type="text" id="message-input" placeholder="Введите сообщение..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Отправить</button>
+        </div>
+        <button onclick="clearChat()" style="margin-top: 10px; border-color: #ff3333; color: #ff3333;">Очистить всю комнату</button>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
