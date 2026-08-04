@@ -1,117 +1,57 @@
-// НАСТРОЙКА КРИПТОГРАФИИ
-const SECRET_KEY = "MySuperSecretPassword123"; 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Chat Room</title>
+    <!-- Сначала подключаем библиотеки -->
+    <script src="https://gstatic.com"></script>
+    <script src="https://gstatic.com"></script>
+    <script src="https://cloudflare.com"></script>
+    <style>
+        body { font-family: monospace; background: #121212; color: #00ff00; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #1a1a1a; padding: 20px; border: 1px solid #333; border-radius: 5px; }
+        #login-screen, #chat-screen { display: none; }
+        .active { display: block !important; }
+        input, select, button { background: #222; color: #00ff00; border: 1px solid #00ff00; padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; font-family: monospace; }
+        button:hover { background: #00ff00; color: #121212; cursor: pointer; }
+        #chat-window { height: 400px; border: 1px solid #333; overflow-y: auto; padding: 10px; background: #0a0a0a; margin-bottom: 10px; display: flex; flex-direction: column; }
+        .msg { margin-bottom: 8px; line-height: 1.4; word-break: break-all; }
+        .time { color: #555; font-size: 0.8em; margin-left: 8px; }
+        .system { color: #ffaa00; font-style: italic; }
+        .controls { display: flex; gap: 10px; }
+        .controls input { flex-grow: 1; }
+        .controls button { width: auto; }
+    </style>
+</head>
+<body>
 
-// НАСТРОЙКА FIREBASE (Ваши актуальные ключи)
-const firebaseConfig = {
-    apiKey: "AIzaSyDIDxe5e6J_Zx-dYvCOSbE8u_lJnX7y_48",
-    authDomain: "privich-b5b4f.firebaseapp.com",
-    databaseURL: "https://firebaseio.com",
-    projectId: "privich-b5b4f",
-    storageBucket: "privich-b5b4f.firebasestorage.app",
-    messagingSenderId: "1047020946649",
-    appId: "1:1047020946649:web:a6f1e95d9a7d3d3972aac8",
-    measurementId: "G-D5H9WX1L9E"
-};
+<div class="container">
+    <!-- ЭКРАН ВХОДА -->
+    <div id="login-screen" class="active">
+        <h2>Войти в комнату</h2>
+        <input type="text" id="username" placeholder="Ваше имя / Ник" maxlength="15">
+        <select id="room-select">
+            <option value="general">Комната 1: Основная</option>
+            <option value="emergency">Комната 2: Экстренная</option>
+            <option value="secret">Комната 3: Секретная</option>
+        </select>
+        <button onclick="joinChat()">Войти</button>
+    </div>
 
-// Глобальные переменные чата
-let currentRoom = 'general';
-let chatUsername = 'Аноним'; // Изменили имя переменной, чтобы избежать конфликтов с ID элементов html
-let userColor = '#ffffff';
+    <!-- ЭКРАН ЧАТА -->
+    <div id="chat-screen">
+        <h3 id="room-title">Комната: </h3>
+        <div id="chat-window"></div>
+        <div class="controls">
+            <input type="text" id="message-input" placeholder="Введите сообщение..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Отправить</button>
+        </div>
+        <button onclick="clearChat()" style="margin-top: 10px; border-color: #ff3333; color: #ff3333;">Очистить всю комнату</button>
+    </div>
+</div>
 
-// Инициализация Firebase
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
-
-// Функция генерации уникального цвета на основе имени
-function generateColor(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const h = Math.abs(hash % 360);
-    return `hsl(${h}, 80%, 65%)`;
-}
-
-// Вход в чат
-function joinChat() {
-    const nameInput = document.getElementById('username').value.trim();
-    if (!nameInput) return alert('Введите имя!');
-    
-    chatUsername = nameInput;
-    userColor = generateColor(chatUsername);
-    currentRoom = document.getElementById('room-select').value;
-    
-    document.getElementById('login-screen').classList.remove('active');
-    document.getElementById('chat-screen').classList.add('active');
-    document.getElementById('room-title').innerText = `Комната: ${currentRoom} (Вы: ${chatUsername})`;
-    
-    listenToRoom();
-}
-
-// Слушаем изменения в комнате
-function listenToRoom() {
-    const roomRef = database.ref('rooms/' + currentRoom);
-    
-    roomRef.on('value', (snapshot) => {
-        const chatWindow = document.getElementById('chat-window');
-        chatWindow.innerHTML = ''; 
-        
-        const data = snapshot.val();
-        if (!data) {
-            chatWindow.innerHTML = '<div class="msg system">История чиста. Начните общение...</div>';
-            return;
-        }
-        
-        Object.values(data).forEach(msgObj => {
-            let decryptedText = "";
-            try {
-                const bytes = CryptoJS.AES.decrypt(msgObj.text, SECRET_KEY);
-                decryptedText = bytes.toString(CryptoJS.enc.Utf8);
-            } catch (e) {
-                decryptedText = "[Ошибка расшифровки / Ключ неверен]";
-            }
-
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'msg';
-            msgDiv.innerHTML = `
-                <span style="color: ${msgObj.color}; font-weight: bold;">&lt;${msgObj.user}&gt;</span> 
-                <span>${decryptedText}</span>
-                <span class="time">${msgObj.time}</span>
-            `;
-            chatWindow.appendChild(msgDiv);
-        });
-        
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-    });
-}
-
-// Отправка сообщения
-function sendMessage() {
-    const input = document.getElementById('message-input');
-    const text = input.value.trim();
-    if (!text) return;
-    
-    const encryptedText = CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-    
-    database.ref('rooms/' + currentRoom).push({
-        user: chatUsername,
-        color: userColor,
-        text: encryptedText, 
-        time: timeStr
-    });
-    
-    input.value = '';
-}
-
-function handleKeyPress(event) {
-    if (event.key === 'Enter') sendMessage();
-}
-
-// Функция полной очистки комнаты
-function clearChat() {
-    if (confirm('Вы уверены, что хотите стереть ВСЮ переписку в этой комнате?')) {
-        database.ref('rooms/' + currentRoom).remove();
-    }
-}
+<!-- Наш скрипт подключаем в самом конце body -->
+<script src="app.js"></script>
+</body>
+</html>
