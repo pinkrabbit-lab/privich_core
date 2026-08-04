@@ -140,13 +140,16 @@ function listenToRoom() {
                 let decryptedText = xorDecipher(msgObj.text, PASSWORD);
                 const msgDiv = document.createElement('div');
                 msgDiv.className = 'msg';
+                
+                // Убрали знаки &lt; (<) и &gt; (>) вокруг имени
                 msgDiv.innerHTML = `
-                    <span style="color: ${msgObj.color}; font-weight: bold;">&lt;${msgObj.user}&gt;</span> 
+                    <span style="color: ${msgObj.color}; font-weight: bold;">${msgObj.user}:</span> 
                     <span>${decryptedText}</span>
                     <span class="time">${msgObj.time}</span>
                 `;
                 chatWindow.appendChild(msgDiv);
             });
+
             
             if (isScrolledToBottom) {
                 chatWindow.scrollTop = chatWindow.scrollHeight;
