@@ -78,9 +78,11 @@ async function joinChat() {
     if (!nameInput) return alert('Введите имя!');
     
     chatUsername = nameInput;
-    currentRoom = document.getElementById('room-select').value;
     
-    // Получаем уникальный цвет
+    // Вместо поиска элемента на странице, сразу принудительно ставим первую комнату
+    currentRoom = 'general';
+    
+    // Получаем уникальный цвет для первой комнаты
     userColor = await allocateUserColor(currentRoom, chatUsername);
     
     document.getElementById('login-screen').classList.remove('active');
