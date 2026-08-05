@@ -251,13 +251,20 @@ function sendMessage() {
     
     if (editingMessageId) {
         // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
+        // 1. Мгновенно обновляем текст локально для плавности
         if (localMessages[editingMessageId]) {
             localMessages[editingMessageId].text = encryptedText;
         }
-        renderChat();
+        renderChat(); 
+        
+        // ВАЖНО: сначала сохраняем ID во временную переменную, чтобы fetch не потерял его
+        const idToSend = editingMessageId;
+        
+        // 2. Сразу очищаем поле ввода и сбрасываем глобальный ID в null, чтобы кнопка вернулась в режим ➔
         cancelEdit(); 
         
-        fetch(`${DB_URL}/rooms/${currentRoom}/${editingMessageId}.json`, {
+        // 3. Отправляем обновление на сервер по железно зафиксированному ID
+        fetch(`${DB_URL}/rooms/${currentRoom}/${idToSend}.json`, {
             method: 'PATCH',
             body: JSON.stringify({ 
                 text: encryptedText,
