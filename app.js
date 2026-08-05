@@ -222,6 +222,10 @@ function sendMessage() {
 function handleKeyPress(event) {
     if (event.key === 'Enter') sendMessage();
 }
+// Вход по нажатию Enter на экране авторизации
+function handleLoginKeyPress(event) {
+    if (event.key === 'Enter') joinChat();
+}
 
 function clearChat() {
     if (confirm('Вы уверены, что хотите полностью стереть переписку в этой вкладке?')) {
