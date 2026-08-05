@@ -214,6 +214,7 @@ function sendMessage() {
         // оно прилетит от сервера как настоящее постоянное сообщение
         setTimeout(() => {
             delete localMessages[tempKey];
+            renderChat();
         }, 1000);
     })
     .catch(err => {
@@ -222,6 +223,10 @@ function sendMessage() {
         renderChat();
         alert("Не удалось отправить сообщение. Проверьте сеть.");
     });
+}
+
+function handleKeyPress(event) {
+    if (event.key === 'Enter') sendMessage();
 }
 
 function clearChat() {
