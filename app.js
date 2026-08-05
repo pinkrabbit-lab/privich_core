@@ -78,7 +78,7 @@ async function joinChat() {
         if (clientPasswordHash !== serverPasswordHash) return alert('Неверное имя пользователя или пароль');
         
         // 2. Скачиваем зашифрованный сейф этого пользователя
-        const resVault = await fetch(`${DB_URL}/vaults/${nameInput}.json`);
+        const resVault = await fetch(`${DB_URL}/vault/${nameInput}.json`);
         const encryptedVaultData = await resVault.json();
         
         if (!encryptedVaultData) {
