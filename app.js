@@ -196,6 +196,9 @@ function startChatSync() {
     if (eventSource) eventSource.close();
     localMessages = {}; 
     
+    const chatWindow = document.getElementById('chat-window');
+    chatWindow.innerHTML = '<div class="msg system">Подключение к комнате...</div>';
+
     eventSource = new EventSource(`${DB_URL}/rooms/${currentRoom}.json`, {
         headers: { "Accept": "text/event-stream" }
     });
@@ -204,30 +207,23 @@ function startChatSync() {
         const payload = JSON.parse(event.data);
         
         if (payload.path === "/") {
-            // Первая загрузка комнаты целиком
+            // Первая полная загрузка комнаты
             localMessages = payload.data || {};
-        } else if (payload.path === null || payload.data === null) {
-            // Полная очистка всей комнаты
-            if (payload.path === "/") localMessages = {};
+        } else if (payload.path === null) {
+            // Полная очистка комнаты кнопкой
+            localMessages = {};
         } else {
-            // Точечное изменение или точечное УДАЛЕНИЕ одного сообщения (например, по пути /key)
+            // Точечное изменение или удаление по конкретному пути (например, /key)
             const msgKey = payload.path.replace('/', '');
-            
             if (payload.data) {
-                // Если данные прилетели (например, при редактировании)
-                if (payload.data.text) {
-                    // Если сервер прислал только измененный текст, сохраняем автора и время
-                    if (localMessages[msgKey]) {
-                        localMessages[msgKey].text = payload.data.text;
-                    } else {
-                        localMessages[msgKey] = payload.data;
-                    }
+                if (localMessages[msgKey]) {
+                    // Если сообщение уже было, обновляем только текст, сохраняя старое время
+                    localMessages[msgKey].text = payload.data.text;
                 } else {
                     localMessages[msgKey] = payload.data;
                 }
             } else {
-                // Если данные НЕ прилетели (payload.data === null) — это точечное УДАЛЕНИЕ!
-                // Стираем из локальной памяти строго это ОДНО сообщение
+                // Если пришел null — это точечное удаление, стираем один ID
                 delete localMessages[msgKey];
             }
         }
@@ -239,18 +235,24 @@ function startChatSync() {
         
         if (payload.data) {
             if (payload.path === "/") {
-                // Если прилетел массив новых сообщений
-                Object.assign(localMessages, payload.data);
+                // ПРОВЕРКА НА ДУБЛИКАТЫ ПРИ РЕДАКТИРОВАНИИ
+                // Firebase прислал изменения в корне. Проверяем каждый ключ.
+                Object.keys(payload.data).forEach(key => {
+                    if (localMessages[key]) {
+                        // Если этот ID уже есть в чате — значит, это РЕДАКТИРОВАНИЕ.
+                        // Меняем ТОЛЬКО текст, не трогая оригинальное время!
+                        localMessages[key].text = payload.data[key].text;
+                    } else {
+                        // Если ключа не было — это реальное новое сообщение от собеседника
+                        localMessages[key] = payload.data[key];
+                    }
+                });
             } else {
-                // Если прилетело изменение конкретного сообщения (например, путь "/-O3fgh...")
+                // Если прилетел патч по конкретному пути сообщения (например, путь "/-O3fgh...")
                 const msgKey = payload.path.replace('/', '');
-                
                 if (localMessages[msgKey]) {
-                    // Если это редактирование существующего сообщения, обновляем только текст!
-                    // Благодаря этому имя автора и его цвет никогда не превратятся в undefined
                     localMessages[msgKey].text = payload.data.text;
                 } else {
-                    // Если это просто новое сообщение
                     localMessages[msgKey] = payload.data;
                 }
             }
@@ -258,7 +260,9 @@ function startChatSync() {
         }
     });
 
-
+    eventSource.onerror = (err) => {
+        console.error("Ошибка потока данных, переподключение...", err);
+    };
 }
 // ОТПРАВКА ИЛИ РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
 function sendMessage() {
