@@ -294,12 +294,19 @@ function sendMessage() {
 }
 
 function initEdit(key) {
+    // Жёсткая проверка: если ключ пустой или временный, не запускаем редактирование
+    if (!key || key.startsWith('temp_')) return;
+    
     const msgObj = localMessages[key];
     if (!msgObj) return;
+    
+    // Принудительно сохраняем реальный ключ Firebase сообщения в память
     editingMessageId = key;
+    
     const input = document.getElementById('message-input');
     input.value = xorDecipher(msgObj.text, decryptedChatKey);
     input.focus();
+    
     document.getElementById('send-button').innerText = "💾";
     input.style.borderColor = "#ffaa00";
 }
