@@ -82,7 +82,7 @@ async function joinChat() {
         const encryptedVaultData = await resVault.json();
         
         if (!encryptedVaultData) {
-            return alert('Сейф ключей не найден в базе данных!');
+            return alert('Доступ ограничен, обратитесь к администратору');
         }
         
         // 3. Открываем сейф с помощью введенного личного пароля
