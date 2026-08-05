@@ -1,13 +1,11 @@
-const DB_URL = "https://firebasedatabase.app";
+const DB_URL = "https://privich-b5b4f-default-rtdb.asia-southeast1.firebasedatabase.app/";
 
 let currentRoom = 'general';
 let chatUsername = 'Аноним';
 let userColor = '#00ff00';
 let eventSource = null; 
 
-// Сюда чат автоматически положит ключ, когда вы «откроете» свой сейф личным паролем
 let decryptedChatKey = ""; 
-
 let localMessages = {};
 
 const NEON_COLORS = [
@@ -44,17 +42,18 @@ async function allocateUserColor(room, name) {
     }
 }
 
+// ЧИСТЫЙ АВТОНОМНЫЙ XOR БЕЗ СТРОННИХ ФУНКЦИЙ
 function xorCipher(text, key) {
     let result = "";
     for (let i = 0; i < text.length; i++) {
         result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
     }
-    return btoa(unescape(encodeURIComponent(result)));
+    return btoa(result); // Только чистый Base64
 }
 
 function xorDecipher(hash, key) {
     try {
-        let text = decodeURIComponent(escape(atob(hash)));
+        let text = atob(hash);
         let result = "";
         for (let i = 0; i < text.length; i++) {
             result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
@@ -63,7 +62,6 @@ function xorDecipher(hash, key) {
     } catch(e) { return "[Ошибка расшифровки]"; }
 }
 
-// ВХОД С АВТОРИЗАЦИЕЙ И ОТКРЫТИЕМ КРИПТО-СЕЙФА
 async function joinChat() {
     const nameInput = document.getElementById('username').value.trim();
     const passwordInput = document.getElementById('password').value.trim();
@@ -71,7 +69,6 @@ async function joinChat() {
     if (!nameInput || !passwordInput) return alert('Введите ник и пароль!');
     
     try {
-        // 1. Проверяем хэш авторизации
         const resAuth = await fetch(`${DB_URL}/users/${nameInput}.json`);
         const serverPasswordHash = await resAuth.json();
         
@@ -80,26 +77,22 @@ async function joinChat() {
         const clientPasswordHash = await sha256(passwordInput);
         if (clientPasswordHash !== serverPasswordHash) return alert('Неверное имя пользователя или пароль');
         
-        // 2. Скачиваем зашифрованный сейф этого пользователя
+        // СТУЧИМСЯ В ВАШУ ВЕТКУ vault
         const resVault = await fetch(`${DB_URL}/vault/${nameInput}.json`);
         const encryptedVaultData = await resVault.json();
         
         if (!encryptedVaultData) {
-            return alert('Доступ ограничен администратором');
+            return alert('Сейф ключей не найден в базе данных vault!');
         }
         
-        // 3. Открываем сейф с помощью введенного личного пароля
         decryptedChatKey = xorDecipher(encryptedVaultData, passwordInput);
         
-        // Проверка успешности открытия сейфа (проверим, содержит ли он маркер "OK_")
         if (!decryptedChatKey.startsWith("OK_")) {
             return alert('Ошибка дешифрования ключа чата!');
         }
         
-        // Убираем технический маркер и получаем чистый ключ чата
         decryptedChatKey = decryptedChatKey.replace("OK_", "");
         
-        // Пускаем в чат
         chatUsername = nameInput;
         currentRoom = 'general';
         
@@ -277,3 +270,4 @@ function clearChat() {
             });
     }
 }
+
