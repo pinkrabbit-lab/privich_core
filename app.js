@@ -270,21 +270,23 @@ function sendMessage() {
     
     if (editingMessageId) {
         // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
-        // 1. Мгновенно обновляем текст в локальной памяти для плавности
         if (localMessages[editingMessageId]) {
             localMessages[editingMessageId].text = encryptedText;
         }
-        renderChat(); // Мгновенно перерисовываем экран
-        
-        // МГНОВЕННАЯ ОЧИСТКА: убираем лаг ожидания сервера
+        renderChat(); 
         cancelEdit(); 
         
-        // 2. Отправляем обновление на сервер в фоне
+        // Отправляем на сервер обновленный текст, сохраняя автора и его цвет
         fetch(`${DB_URL}/rooms/${currentRoom}/${editingMessageId}.json`, {
             method: 'PATCH',
-            body: JSON.stringify({ text: encryptedText })
+            body: JSON.stringify({ 
+                text: encryptedText,
+                user: chatUsername,
+                color: userColor
+            })
         });
     } else {
+
         // --- ОБЫЧНАЯ ОТПРАВКА ---
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
