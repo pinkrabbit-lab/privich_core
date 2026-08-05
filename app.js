@@ -8,6 +8,9 @@ let eventSource = null;
 let decryptedChatKey = ""; 
 let localMessages = {};
 
+// Переменная для хранения ID редактируемого сообщения
+let editingMessageId = null; 
+
 const NEON_COLORS = [
     'hsl(120, 100%, 60%)', 'hsl(180, 100%, 50%)', 'hsl(200, 100%, 60%)', 
     'hsl(60, 100%, 50%)',  'hsl(36, 100%, 50%)',  'hsl(0, 100%, 60%)',   
@@ -42,9 +45,7 @@ async function allocateUserColor(room, name) {
     }
 }
 
-// ЧИСТЫЙ АВТОНОМНЫЙ XOR БЕЗ СТРОННИХ ФУНКЦИЙ
 function xorCipher(text, key) {
-    // Безопасно переводим русский текст в байтовую строку Latin1
     let utf8Text = unescape(encodeURIComponent(text));
     let result = "";
     for (let i = 0; i < utf8Text.length; i++) {
@@ -60,11 +61,8 @@ function xorDecipher(hash, key) {
         for (let i = 0; i < text.length; i++) {
             result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
         }
-        // Возвращаем байты обратно в читаемый русский текст
         return decodeURIComponent(escape(result));
-    } catch(e) { 
-        return "[Ошибка расшифровки]"; 
-    }
+    } catch(e) { return "[Ошибка расшифровки]"; }
 }
 
 async function joinChat() {
@@ -82,19 +80,13 @@ async function joinChat() {
         const clientPasswordHash = await sha256(passwordInput);
         if (clientPasswordHash !== serverPasswordHash) return alert('Неверное имя пользователя или пароль');
         
-        // СТУЧИМСЯ В ВАШУ ВЕТКУ vault
         const resVault = await fetch(`${DB_URL}/vault/${nameInput}.json`);
         const encryptedVaultData = await resVault.json();
         
-        if (!encryptedVaultData) {
-            return alert('Сейф ключей не найден в базе данных vault!');
-        }
+        if (!encryptedVaultData) return alert('Сейф ключей не найден в базе данных vault!');
         
         decryptedChatKey = xorDecipher(encryptedVaultData, passwordInput);
-        
-        if (!decryptedChatKey.startsWith("OK_")) {
-            return alert('Ошибка дешифрования ключа чата!');
-        }
+        if (!decryptedChatKey.startsWith("OK_")) return alert('Ошибка дешифрования ключа чата!');
         
         decryptedChatKey = decryptedChatKey.replace("OK_", "");
         
@@ -125,6 +117,9 @@ function updateHeaderUI() {
 async function switchRoom(newRoom) {
     if (currentRoom === newRoom) return;
     currentRoom = newRoom;
+    
+    // Сбрасываем режим редактирования при смене комнаты
+    cancelEdit();
     
     userColor = await allocateUserColor(currentRoom, chatUsername);
     updateHeaderUI();
@@ -164,11 +159,30 @@ function renderChat() {
         
         let decryptedText = xorDecipher(msgObj.text, decryptedChatKey);
         const msgDiv = document.createElement('div');
-        msgDiv.className = 'msg';
+        
+        // Красим рамку в зависимости от автора
+        if (msgObj.user === chatUsername) {
+            msgDiv.className = 'msg my-msg';
+        } else {
+            msgDiv.className = 'msg';
+        }
+        
+        // Кнопки управления (показываем только для реальных СВОИХ сообщений)
+        let actionsHtml = "";
+        if (msgObj.user === chatUsername && !key.startsWith('temp_')) {
+            actionsHtml = `
+                <span class="msg-actions">
+                    <span class="action-lnk edit-lnk" onclick="initEdit('${key}')">[e]</span>
+                    <span class="action-lnk" onclick="deleteMessage('${key}')">[x]</span>
+                </span>
+            `;
+        }
+
         msgDiv.innerHTML = `
             <span style="color: ${msgObj.color}; font-weight: bold;">${msgObj.user}:</span> 
             <span>${decryptedText}</span>
             <span class="time">${msgObj.time}</span>
+            ${actionsHtml}
         `;
         chatWindow.appendChild(msgDiv);
     });
@@ -180,11 +194,8 @@ function renderChat() {
 
 function startChatSync() {
     if (eventSource) eventSource.close();
-    
     localMessages = {}; 
-    const chatWindow = document.getElementById('chat-window');
-    chatWindow.innerHTML = '<div class="msg system">Подключение к комнате...</div>';
-
+    
     eventSource = new EventSource(`${DB_URL}/rooms/${currentRoom}.json`, {
         headers: { "Accept": "text/event-stream" }
     });
@@ -213,66 +224,68 @@ function startChatSync() {
             renderChat();
         }
     });
-
-    eventSource.onerror = (err) => {
-        console.error("Ошибка потока данных, переподключение...", err);
-    };
 }
 
+// ОТПРАВКА ИЛИ РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
 function sendMessage() {
     const input = document.getElementById('message-input');
     const text = input.value.trim();
     if (!text) return;
     
     const encryptedText = xorCipher(text, decryptedChatKey);
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
-    const payload = {
-        user: chatUsername,
-        color: userColor,
-        text: encryptedText,
-        time: timeStr
-    };
+    if (editingMessageId) {
+        // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
+        // Обновляем текст сообщения в базе методом PATCH
+        fetch(`${DB_URL}/rooms/${currentRoom}/${editingMessageId}.json`, {
+            method: 'PATCH',
+            body: JSON.stringify({ text: encryptedText })
+        }).then(() => {
+            cancelEdit();
+        });
+    } else {
+        // --- ОБЫЧНАЯ ОТПРАВКА ---
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        const payload = {
+            user: chatUsername,
+            color: userColor,
+            text: encryptedText,
+            time: timeStr
+        };
 
-    const tempKey = 'temp_' + Date.now();
-    localMessages[tempKey] = {
-        user: chatUsername,
-        color: userColor,
-        text: encryptedText, 
-        time: timeStr
-    };
-    
-    renderChat(); 
-    input.value = ''; 
-    
-    fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
-        method: 'POST',
-        body: JSON.stringify(payload)
-    })
-    .catch(err => {
-        delete localMessages[tempKey];
-        renderChat();
-        alert("Сообщение не ушло. Проверьте связь.");
-    });
-}
-
-function handleKeyPress(event) {
-    if (event.key === 'Enter') sendMessage();
-}
-
-function handleLoginKeyPress(event) {
-    if (event.key === 'Enter') joinChat();
-}
-
-function clearChat() {
-    if (confirm('Вы уверены, что хотите полностью стереть переписку в этой вкладке?')) {
-        fetch(`${DB_URL}/rooms/${currentRoom}.json`, { method: 'DELETE' })
-            .then(() => {
-                fetch(`${DB_URL}/colors/${currentRoom}.json`, { method: 'DELETE' });
-                localMessages = {};
-                renderChat();
-            });
+        const tempKey = 'temp_' + Date.now();
+        localMessages[tempKey] = payload;
+        
+        renderChat(); 
+        input.value = ''; 
+        
+        fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        }).catch(err => {
+            delete localMessages[tempKey];
+            renderChat();
+            alert("Сообщение не ушло.");
+        });
     }
+}
+
+// Запуск редактирования
+function initEdit(key) {
+    const msgObj = localMessages[key];
+    if (!msgObj) return;
+    
+    editingMessageId = key;
+    
+    // Переносим текст в поле ввода, предварительно расшифровав
+    const input = document.getElementById('message-input');
+    input.value = xorDecipher(msgObj.text, decryptedChatKey);
+    input.focus();
+    
+    // Меняем иконку кнопки на дискету (сохранение) и подсвечиваем поле ввода
+    document.getElementById('send-button').innerText = "💾";
+    input.style.borderColor = "#ffaa00";
 }
 
