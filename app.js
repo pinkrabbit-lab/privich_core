@@ -288,4 +288,39 @@ function initEdit(key) {
     document.getElementById('send-button').innerText = "💾";
     input.style.borderColor = "#ffaa00";
 }
+function cancelEdit() {
+    editingMessageId = null;
+    const input = document.getElementById('message-input');
+    input.value = "";
+    input.style.borderColor = "#3a7ecc";
+    document.getElementById('send-button').innerText = "➔";
+}
+
+// ФУНКЦИЯ УДАЛЕНИЯ ОДНОГО СООБЩЕНИЯ
+function deleteMessage(key) {
+    if (confirm("Удалить это сообщение для всех?")) {
+        fetch(`${DB_URL}/rooms/${currentRoom}/${key}.json`, {
+            method: 'DELETE'
+        });
+    }
+}
+
+function handleKeyPress(event) {
+    if (event.key === 'Enter') sendMessage();
+}
+
+function handleLoginKeyPress(event) {
+    if (event.key === 'Enter') joinChat();
+}
+
+function clearChat() {
+    if (confirm('Вы уверены, что хотите полностью стереть переписку в этой вкладке?')) {
+        fetch(`${DB_URL}/rooms/${currentRoom}.json`, { method: 'DELETE' })
+            .then(() => {
+                fetch(`${DB_URL}/colors/${currentRoom}.json`, { method: 'DELETE' });
+                localMessages = {};
+                renderChat();
+            });
+    }
+}
 
