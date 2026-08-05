@@ -8,48 +8,33 @@ const DB_URL = "https://privich-b5b4f-default-rtdb.asia-southeast1.firebasedatab
 let currentRoom = 'general';
 let chatUsername = 'Аноним';
 let userColor = '#00ff00';
-let chatInterval = null;
+let eventSource = null; // Переменная для хранения открытого канала связи
 
-// Палитра ярких неоновых цветов (киберпанк/матрица стиль), исключая розовый повтор
+// Палитра ярких неоновых цветов (киберпанк/матрица стиль)
 const NEON_COLORS = [
-    'hsl(120, 100%, 60%)', // Ярко-зеленый
-    'hsl(180, 100%, 50%)', // Циан / Голубой
-    'hsl(200, 100%, 60%)', // Неоново-синий
-    'hsl(60, 100%, 50%)',  // Желтый
-    'hsl(36, 100%, 50%)',  // Оранжевый
-    'hsl(0, 100%, 60%)',   // Красный
-    'hsl(280, 100%, 65%)', // Фиолетовый
-    'hsl(150, 100%, 55%)'  // Мятный
+    'hsl(120, 100%, 60%)', 'hsl(180, 100%, 50%)', 'hsl(200, 100%, 60%)', 
+    'hsl(60, 100%, 50%)',  'hsl(36, 100%, 50%)',  'hsl(0, 100%, 60%)',   
+    'hsl(280, 100%, 65%)', 'hsl(150, 100%, 55%)'  
 ];
 
 // Улучшенный генератор уникального незанятого цвета
 async function allocateUserColor(room, name) {
     try {
-        // Проверяем, какие цвета заняты в этой комнате
         const res = await fetch(`${DB_URL}/colors/${room}.json`);
         const takenColors = await res.json() || {};
-        
-        // Если этот пользователь уже занимал цвет ранее, возвращаем его
         if (takenColors[name]) return takenColors[name];
         
         const usedValues = Object.values(takenColors);
-        // Фильтруем палитру, убирая уже занятые цвета
         let availableColors = NEON_COLORS.filter(c => !usedValues.includes(c));
-        
-        // Если все цвета заняты, берем любой случайный
         if (availableColors.length === 0) availableColors = NEON_COLORS;
         
         const randomColor = availableColors[Math.floor(Math.random() * availableColors.length)];
-        
-        // Записываем наш выбор в базу, чтобы забронировать его
         await fetch(`${DB_URL}/colors/${room}/${name}.json`, {
             method: 'PUT',
             body: JSON.stringify(randomColor)
         });
-        
         return randomColor;
     } catch (e) {
-        // Если сеть лагает, отдаем случайный из палитры
         return NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
     }
 }
@@ -78,72 +63,73 @@ async function joinChat() {
     if (!nameInput) return alert('Введите имя!');
     
     chatUsername = nameInput;
-    
-    // Вместо поиска элемента на странице, сразу принудительно ставим первую комнату
     currentRoom = 'general';
     
-    // Получаем уникальный цвет для первой комнаты
     userColor = await allocateUserColor(currentRoom, chatUsername);
     
     document.getElementById('login-screen').classList.remove('active');
     document.getElementById('chat-screen').classList.add('active');
     
     updateHeaderUI();
-    startChatSync();
+    startChatSync(); // Запускаем умную подписку
 }
 
-// Обновление вкладок в шапке
 function updateHeaderUI() {
-    document.getElementById('user-info').innerHTML = `Вы: <span style="color: ${userColor}; font-weight:bold;">&lt;${chatUsername}&gt;</span>`;
-    
-    // Сбрасываем активность всех вкладок
+    document.getElementById('user-info').innerHTML = `Вы: <span style="color: ${userColor}; font-weight:bold;">${chatUsername}</span>`;
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active-tab'));
-    
-    // Подсвечиваем текущую вкладку
     const activeTab = document.getElementById(`tab-${currentRoom}`);
     if (activeTab) activeTab.classList.add('active-tab');
 }
 
-// Переключение комнат по кнопкам-закладкам
 async function switchRoom(newRoom) {
     if (currentRoom === newRoom) return;
     currentRoom = newRoom;
     
-    // Перерегистрируем цвет для новой комнаты
     userColor = await allocateUserColor(currentRoom, chatUsername);
-    
     updateHeaderUI();
-    // Мгновенно перерисовываем экран под новую комнату
-    listenToRoom();
+    startChatSync(); // Переподключаем канал связи на новую комнату
 }
 
+// УМНАЯ ПОДПИСКА НА ОБНОВЛЕНИЯ (БЕЗ ТАЙМЕРОВ И ПИНГОВ)
 function startChatSync() {
-    if (chatInterval) clearInterval(chatInterval);
-    listenToRoom();
-    chatInterval = setInterval(listenToRoom, 2000);
-}
+    // Если канал уже был открыт (например, при смене комнаты), закрываем старый
+    if (eventSource) {
+        eventSource.close();
+    }
 
-function listenToRoom() {
-    fetch(`${DB_URL}/rooms/${currentRoom}.json`)
-        .then(res => res.json())
-        .then(data => {
-            const chatWindow = document.getElementById('chat-window');
-            // Запоминаем, был ли скролл в самом низу до обновления
-            const isScrolledToBottom = chatWindow.scrollHeight - chatWindow.clientHeight <= chatWindow.scrollTop + 50;
-            
-            chatWindow.innerHTML = '';
-            
-            if (!data) {
-                chatWindow.innerHTML = '<div class="msg system">История чиста. Начните общение...</div>';
-                return;
-            }
-            
-            Object.values(data).forEach(msgObj => {
+    const chatWindow = document.getElementById('chat-window');
+    chatWindow.innerHTML = '<div class="msg system">Подключение к комнате...</div>';
+
+    // Открываем постоянное прямое соединение с базой данных Firebase
+    // Флаг в конце ссылки говорит серверу: держи соединение открытым и присылай ивенты (SSE)
+    eventSource = new EventSource(`${DB_URL}/rooms/${currentRoom}.json`, {
+        headers: { "Accept": "text/event-stream" }
+    });
+
+    // Этот код сработает ТОЛЬКО когда в базе данных изменятся или добавятся сообщения
+    eventSource.addEventListener('put', (event) => {
+        const payload = JSON.parse(event.data);
+        
+        // Запоминаем, был ли скролл внизу
+        const isScrolledToBottom = chatWindow.scrollHeight - chatWindow.clientHeight <= chatWindow.scrollTop + 50;
+        chatWindow.innerHTML = '';
+
+        // Если в комнате вообще нет сообщений
+        if (!payload || !payload.data) {
+            chatWindow.innerHTML = '<div class="msg system">История чиста. Начните общение...</div>';
+            return;
+        }
+
+        // В зависимости от того, обновилась вся комната или прилетело одно сообщение, Firebase присылает разную структуру
+        const messages = (event.target.url.includes(currentRoom) && payload.path === "/") ? payload.data : payload.data;
+        
+        if (messages) {
+            Object.values(messages).forEach(msgObj => {
+                if (!msgObj || !msgObj.text) return;
+                
                 let decryptedText = xorDecipher(msgObj.text, PASSWORD);
                 const msgDiv = document.createElement('div');
                 msgDiv.className = 'msg';
-                
-                // Убрали знаки &lt; (<) и &gt; (>) вокруг имени
                 msgDiv.innerHTML = `
                     <span style="color: ${msgObj.color}; font-weight: bold;">${msgObj.user}:</span> 
                     <span>${decryptedText}</span>
@@ -151,13 +137,16 @@ function listenToRoom() {
                 `;
                 chatWindow.appendChild(msgDiv);
             });
+        }
 
-            
-            if (isScrolledToBottom) {
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-            }
-        })
-        .catch(err => console.error("Ошибка обновления чата"));
+        if (isScrolledToBottom) {
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+    });
+
+    eventSource.onerror = (err) => {
+        console.error("Ошибка потока данных, переподключение...", err);
+    };
 }
 
 function sendMessage() {
@@ -176,13 +165,13 @@ function sendMessage() {
         time: timeStr
     };
     
+    // Отправляем сообщение обычным запросом. Поток eventSource сам поймает его и выведет на экран
     fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
         method: 'POST',
         body: JSON.stringify(payload)
     })
     .then(() => {
         input.value = '';
-        listenToRoom();
     });
 }
 
@@ -194,9 +183,7 @@ function clearChat() {
     if (confirm('Вы уверены, что хотите полностью стереть переписку в этой вкладке?')) {
         fetch(`${DB_URL}/rooms/${currentRoom}.json`, { method: 'DELETE' })
             .then(() => {
-                // Также очищаем занятые цвета для этой комнаты
                 fetch(`${DB_URL}/colors/${currentRoom}.json`, { method: 'DELETE' });
-                listenToRoom();
             });
     }
 }
