@@ -217,14 +217,28 @@ function startChatSync() {
         renderChat();
     });
 
-    eventSource.addEventListener('patch', (event) => {
+    eventSource.addEventListener('put', (event) => {
         const payload = JSON.parse(event.data);
-        if (payload.data) {
-            Object.assign(localMessages, payload.data);
-            renderChat();
+        
+        if (payload.path === "/") {
+            // Загрузилась вся база данных комнаты целиком при входе
+            localMessages = payload.data || {};
+        } else if (payload.path === null) {
+            // Базу очистили полностью кнопкой "Очистить экран"
+            localMessages = {};
+        } else {
+            // Изменилось или УДАЛИЛОСЬ конкретное сообщение (например /key)
+            const msgKey = payload.path.replace('/', '');
+            if (payload.data && payload.data.text) {
+                // Если данные пришли — обновляем сообщение
+                localMessages[msgKey] = payload.data;
+            } else {
+                // Если пришел null (данных нет) — удаляем ИМЕННО ЭТО ОДНО сообщение из памяти
+                delete localMessages[msgKey];
+            }
         }
+        renderChat();
     });
-}
 
 // ОТПРАВКА ИЛИ РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
 function sendMessage() {
@@ -235,8 +249,12 @@ function sendMessage() {
     const encryptedText = xorCipher(text, decryptedChatKey);
     
     if (editingMessageId) {
-        // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
-        // Обновляем текст сообщения в базе методом PATCH
+        // 1. Сначала мгновенно обновляем текст в локальной памяти для плавности
+        if (localMessages[editingMessageId]) {
+            localMessages[editingMessageId].text = encryptedText;
+        }
+        renderChat();       
+        // 2. Отправляем обновление на сервер
         fetch(`${DB_URL}/rooms/${currentRoom}/${editingMessageId}.json`, {
             method: 'PATCH',
             body: JSON.stringify({ text: encryptedText })
@@ -299,11 +317,22 @@ function cancelEdit() {
 // ФУНКЦИЯ УДАЛЕНИЯ ОДНОГО СООБЩЕНИЯ
 function deleteMessage(key) {
     if (confirm("Удалить это сообщение для всех?")) {
+        // --- ОПТИМИСТИЧНЫЙ ИНТЕРФЕЙС ---
+        // Мгновенно стираем сообщение из локальной памяти вкладки, не дожидаясь ответа сервера
+        if (localMessages[key]) {
+            delete localMessages[key];
+        }
+        // Сразу же перерисовываем экран для себя
+        renderChat();
+        // -------------------------------
+
+        // Отправляем команду удаления на сервер Firebase
         fetch(`${DB_URL}/rooms/${currentRoom}/${key}.json`, {
             method: 'DELETE'
         });
     }
 }
+
 
 function handleKeyPress(event) {
     if (event.key === 'Enter') sendMessage();
