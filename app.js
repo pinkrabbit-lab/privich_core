@@ -14,6 +14,14 @@ const NEON_COLORS = [
     'hsl(280, 100%, 65%)', 'hsl(150, 100%, 55%)'  
 ];
 
+// Функция генерации SHA-256 хэша силами встроенного движка браузера (без сторонних библиотек)
+async function sha256(string) {
+    const utf8 = new TextEncoder().encode(string);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function allocateUserColor(room, name) {
     try {
         const res = await fetch(`${DB_URL}/colors/${room}.json`);
@@ -54,20 +62,47 @@ function xorDecipher(hash, key) {
     } catch(e) { return "[Ошибка расшифровки]"; }
 }
 
+// НАДЕЖНАЯ АВТОРИЗАЦИЯ НА ВСТРОЕННЫХ КРИПТО-МЕТОДАХ
 async function joinChat() {
     const nameInput = document.getElementById('username').value.trim();
-    if (!nameInput) return alert('Введите имя!');
+    const passwordInput = document.getElementById('password').value.trim();
     
-    chatUsername = nameInput;
-    currentRoom = 'general';
+    if (!nameInput || !passwordInput) return alert('Введите ник и пароль!');
     
-    userColor = await allocateUserColor(currentRoom, chatUsername);
-    
-    document.getElementById('login-screen').classList.remove('active');
-    document.getElementById('chat-screen').classList.add('active');
-    
-    updateHeaderUI();
-    startChatSync(); 
+    try {
+        // 1. Стучимся в Firebase в защищенную ветку users
+        const res = await fetch(`${DB_URL}/users/${nameInput}.json`);
+        const serverPasswordHash = await res.json();
+        
+        // Если в базе вообще нет такого пользователя
+        if (!serverPasswordHash) {
+            return alert('Неверное имя пользователя или пароль');
+        }
+        
+        // 2. Считаем хэш пароля прямо в браузере через системный Web Crypto
+        const clientPasswordHash = await sha256(passwordInput);
+        
+        // 3. Сверяем хэши
+        if (clientPasswordHash !== serverPasswordHash) {
+            return alert('Неверное имя пользователя или пароль');
+        }
+        
+        // Если всё успешно — пускаем
+        chatUsername = nameInput;
+        currentRoom = 'general';
+        
+        userColor = await allocateUserColor(currentRoom, chatUsername);
+        
+        document.getElementById('login-screen').classList.remove('active');
+        document.getElementById('chat-screen').classList.add('active');
+        
+        updateHeaderUI();
+        startChatSync(); 
+        
+    } catch (e) {
+        console.error(e);
+        alert('Ошибка сети или конфигурации базы данных.');
+    }
 }
 
 function updateHeaderUI() {
@@ -86,7 +121,6 @@ async function switchRoom(newRoom) {
     startChatSync(); 
 }
 
-// УМНЫЙ ТРЕНДЕРИНГ С ЗАЩИТОЙ ОТ ДВОЕНИЯ
 function renderChat() {
     const chatWindow = document.getElementById('chat-window');
     const isScrolledToBottom = chatWindow.scrollHeight - chatWindow.clientHeight <= chatWindow.scrollTop + 50;
@@ -99,16 +133,13 @@ function renderChat() {
         return;
     }
 
-    // Собираем массив текстов всех реальных (серверных) сообщений от текущего пользователя
     const serverMessageTexts = keys
         .filter(key => !key.startsWith('temp_') && localMessages[key]?.user === chatUsername)
         .map(key => localMessages[key]?.text);
 
-    // Фильтруем ключи, мгновенно удаляя временные дубликаты, которые уже есть на сервере
     const finalKeys = keys.filter(key => {
         if (key.startsWith('temp_')) {
             const tempMsg = localMessages[key];
-            // Если текст этого временного сообщения уже пришел от сервера — удаляем его из памяти
             if (serverMessageTexts.includes(tempMsg.text)) {
                 delete localMessages[key];
                 return false;
@@ -117,7 +148,6 @@ function renderChat() {
         return true;
     });
 
-    // Отрисовываем очищенный список
     finalKeys.forEach(key => {
         const msgObj = localMessages[key];
         if (!msgObj || !msgObj.text) return;
@@ -195,7 +225,6 @@ function sendMessage() {
         time: timeStr
     };
 
-    // Создаем оптимистичную локальную копию
     const tempKey = 'temp_' + Date.now();
     localMessages[tempKey] = {
         user: chatUsername,
@@ -204,15 +233,14 @@ function sendMessage() {
         time: timeStr
     };
     
-    renderChat(); // Мгновенный вывод на экран
-    input.value = ''; // Сразу очищаем поле ввода для удобства
+    renderChat(); 
+    input.value = ''; 
     
     fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
         method: 'POST',
         body: JSON.stringify(payload)
     })
     .catch(err => {
-        // Если сеть подвела, удаляем временную копию и ругаемся
         delete localMessages[tempKey];
         renderChat();
         alert("Сообщение не ушло. Проверьте связь.");
@@ -222,7 +250,7 @@ function sendMessage() {
 function handleKeyPress(event) {
     if (event.key === 'Enter') sendMessage();
 }
-// Вход по нажатию Enter на экране авторизации
+
 function handleLoginKeyPress(event) {
     if (event.key === 'Enter') joinChat();
 }
