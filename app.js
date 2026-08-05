@@ -294,13 +294,14 @@ function sendMessage() {
 }
 
 function initEdit(key) {
-    // Жёсткая проверка: если ключ пустой или временный, не запускаем редактирование
+    // Всплывающее окно для теста: покажет, какой именно ID прилетел при клике
+    console.log("Кликнули на редактирование сообщения с ID:", key);
+    
     if (!key || key.startsWith('temp_')) return;
     
     const msgObj = localMessages[key];
     if (!msgObj) return;
     
-    // Принудительно сохраняем реальный ключ Firebase сообщения в память
     editingMessageId = key;
     
     const input = document.getElementById('message-input');
@@ -310,6 +311,7 @@ function initEdit(key) {
     document.getElementById('send-button').innerText = "💾";
     input.style.borderColor = "#ffaa00";
 }
+
 
 function cancelEdit() {
     editingMessageId = null;
