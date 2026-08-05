@@ -1,4 +1,4 @@
-const DB_URL = "https://privich-b5b4f-default-rtdb.asia-southeast1.firebasedatabase.app";
+const DB_URL = "https://privich-b5b4f-default-rtdb.asia-southeast1.firebasedatabase.app/";
 
 let currentRoom = 'general';
 let chatUsername = 'Аноним';
