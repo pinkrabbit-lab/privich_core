@@ -44,11 +44,13 @@ async function allocateUserColor(room, name) {
 
 // ЧИСТЫЙ АВТОНОМНЫЙ XOR БЕЗ СТРОННИХ ФУНКЦИЙ
 function xorCipher(text, key) {
+    // Безопасно переводим русский текст в байтовую строку Latin1
+    let utf8Text = unescape(encodeURIComponent(text));
     let result = "";
-    for (let i = 0; i < text.length; i++) {
-        result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    for (let i = 0; i < utf8Text.length; i++) {
+        result += String.fromCharCode(utf8Text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
     }
-    return btoa(result); // Только чистый Base64
+    return btoa(result); 
 }
 
 function xorDecipher(hash, key) {
@@ -58,8 +60,11 @@ function xorDecipher(hash, key) {
         for (let i = 0; i < text.length; i++) {
             result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
         }
-        return result;
-    } catch(e) { return "[Ошибка расшифровки]"; }
+        // Возвращаем байты обратно в читаемый русский текст
+        return decodeURIComponent(escape(result));
+    } catch(e) { 
+        return "[Ошибка расшифровки]"; 
+    }
 }
 
 async function joinChat() {
