@@ -233,7 +233,7 @@ function startChatSync() {
         }
         renderChat();
     });
-
+}
 // ОТПРАВКА ИЛИ РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
 function sendMessage() {
     const input = document.getElementById('message-input');
