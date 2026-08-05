@@ -291,15 +291,14 @@ function initEdit(key) {
     
     editingMessageId = key;
     
-    // Переносим текст в поле ввода, предварительно расшифровав
     const input = document.getElementById('message-input');
     input.value = xorDecipher(msgObj.text, decryptedChatKey);
     input.focus();
     
-    // Меняем иконку кнопки на дискету (сохранение) и подсвечиваем поле ввода
     document.getElementById('send-button').innerText = "💾";
     input.style.borderColor = "#ffaa00";
 }
+
 function cancelEdit() {
     editingMessageId = null;
     const input = document.getElementById('message-input');
@@ -308,22 +307,18 @@ function cancelEdit() {
     document.getElementById('send-button').innerText = "➔";
 }
 
-// ФУНКЦИЯ УДАЛЕНИЯ ОДНОГО СООБЩЕНИЯ
 function deleteMessage(key) {
     if (confirm("Удалить это сообщение для всех?")) {
-        // Оптимистично удаляем сообщение локально для себя
         if (localMessages[key]) {
             delete localMessages[key];
         }
-        renderChat(); // Мгновенно перерисовываем экран
+        renderChat();
         
-        // Отправляем запрос на сервер
-        fetch(`${DB_URL}/rooms/${currentRoom}/${key}.json`, { 
-            method: 'DELETE' 
+        fetch(`${DB_URL}/rooms/${currentRoom}/${key}.json`, {
+            method: 'DELETE'
         });
     }
 }
-
 
 function handleKeyPress(event) {
     if (event.key === 'Enter') sendMessage();
