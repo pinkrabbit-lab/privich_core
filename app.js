@@ -270,13 +270,14 @@ function sendMessage() {
     
     if (editingMessageId) {
         // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
+        // 1. Мгновенно обновляем текст в локальной памяти для плавности
         if (localMessages[editingMessageId]) {
             localMessages[editingMessageId].text = encryptedText;
         }
-        renderChat(); 
-        cancelEdit(); 
+        renderChat(); // Мгновенно перерисовываем экран (текст обновится без создания клонов)
+        cancelEdit(); // Очищаем поле ввода и возвращаем стрелочку
         
-        // Отправляем на сервер обновленный текст, сохраняя автора и его цвет
+        // 2. Отправляем обновление на сервер в фоне
         fetch(`${DB_URL}/rooms/${currentRoom}/${editingMessageId}.json`, {
             method: 'PATCH',
             body: JSON.stringify({ 
@@ -286,8 +287,7 @@ function sendMessage() {
             })
         });
     } else {
-
-        // --- ОБЫЧНАЯ ОТПРАВКА ---
+        // --- ОБЫЧНАЯ ОТПРАВКА НОВОГО СООБЩЕНИЯ ---
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         
@@ -298,6 +298,7 @@ function sendMessage() {
             time: timeStr
         };
 
+        // Вот этот блок temp_ теперь работает СТРОГО для новых сообщений
         const tempKey = 'temp_' + Date.now();
         localMessages[tempKey] = payload;
         
@@ -314,6 +315,7 @@ function sendMessage() {
         });
     }
 }
+
 
 // Запуск редактирования
 function initEdit(key) {
