@@ -7,8 +7,6 @@ let eventSource = null;
 
 let decryptedChatKey = ""; 
 let localMessages = {};
-
-// Переменная для хранения ID редактируемого сообщения
 let editingMessageId = null; 
 
 const NEON_COLORS = [
@@ -46,7 +44,7 @@ async function allocateUserColor(room, name) {
 }
 
 function xorCipher(text, key) {
-    let utf8Text = unescape(encodeURIComponent(text));
+    const utf8Text = unescape(encodeURIComponent(text));
     let result = "";
     for (let i = 0; i < utf8Text.length; i++) {
         result += String.fromCharCode(utf8Text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
@@ -117,57 +115,47 @@ function updateHeaderUI() {
 async function switchRoom(newRoom) {
     if (currentRoom === newRoom) return;
     currentRoom = newRoom;
-    
-    // Сбрасываем режим редактирования при смене комнаты
     cancelEdit();
-    
     userColor = await allocateUserColor(currentRoom, chatUsername);
     updateHeaderUI();
     startChatSync(); 
 }
 
+// Вспомогательная функция полной очистки временных копий из памяти
+function clearTempMessages() {
+    Object.keys(localMessages).forEach(key => {
+        if (key.startsWith('temp_')) {
+            delete localMessages[key];
+        }
+    });
+}
+
+// КРИСТАЛЬНО ЧИСТЫЙ РЕНДЕР БЕЗ ОШИБОК И ФАНТОМОВ
 function renderChat() {
     const chatWindow = document.getElementById('chat-window');
     const isScrolledToBottom = chatWindow.scrollHeight - chatWindow.clientHeight <= chatWindow.scrollTop + 50;
     
     chatWindow.innerHTML = '';
-
     const keys = Object.keys(localMessages);
+
     if (keys.length === 0) {
         chatWindow.innerHTML = '<div class="msg system">История чиста. Начните общение...</div>';
         return;
     }
 
-    const serverMessageTexts = keys
-        .filter(key => !key.startsWith('temp_') && localMessages[key]?.user === chatUsername)
-        .map(key => localMessages[key]?.text);
-
-    const finalKeys = keys.filter(key => {
-        if (key.startsWith('temp_')) {
-            const tempMsg = localMessages[key];
-            if (serverMessageTexts.includes(tempMsg.text)) {
-                delete localMessages[key];
-                return false;
-            }
-        }
-        return true;
-    });
-
-    finalKeys.forEach(key => {
+    keys.forEach(key => {
         const msgObj = localMessages[key];
         if (!msgObj || !msgObj.text) return;
         
         let decryptedText = xorDecipher(msgObj.text, decryptedChatKey);
         const msgDiv = document.createElement('div');
         
-        // Красим рамку в зависимости от автора
         if (msgObj.user === chatUsername) {
             msgDiv.className = 'msg my-msg';
         } else {
             msgDiv.className = 'msg';
         }
         
-        // Кнопки управления (показываем только для реальных СВОИХ сообщений)
         let actionsHtml = "";
         if (msgObj.user === chatUsername && !key.startsWith('temp_')) {
             actionsHtml = `
@@ -178,10 +166,13 @@ function renderChat() {
             `;
         }
 
+        // Жёсткая защита: если время почему-то undefined, ставим прочерк, но из памяти не стираем
+        const displayTime = msgObj.time || "--:--";
+
         msgDiv.innerHTML = `
             <span style="color: ${msgObj.color}; font-weight: bold;">${msgObj.user}:</span> 
             <span>${decryptedText}</span>
-            <span class="time">${msgObj.time}</span>
+            <span class="time">${displayTime}</span>
             ${actionsHtml}
         `;
         chatWindow.appendChild(msgDiv);
@@ -196,9 +187,6 @@ function startChatSync() {
     if (eventSource) eventSource.close();
     localMessages = {}; 
     
-    const chatWindow = document.getElementById('chat-window');
-    chatWindow.innerHTML = '<div class="msg system">Подключение к комнате...</div>';
-
     eventSource = new EventSource(`${DB_URL}/rooms/${currentRoom}.json`, {
         headers: { "Accept": "text/event-stream" }
     });
@@ -207,23 +195,18 @@ function startChatSync() {
         const payload = JSON.parse(event.data);
         
         if (payload.path === "/") {
-            // Первая полная загрузка комнаты
+            // Прилетела вся база: временные сообщения больше не нужны, заменяем их серверными
             localMessages = payload.data || {};
         } else if (payload.path === null) {
-            // Полная очистка комнаты кнопкой
             localMessages = {};
         } else {
-            // Точечное изменение или удаление по конкретному пути (например, /key)
             const msgKey = payload.path.replace('/', '');
-            if (payload.data) {
-                if (localMessages[msgKey]) {
-                    // Если сообщение уже было, обновляем только текст, сохраняя старое время
-                    localMessages[msgKey].text = payload.data.text;
-                } else {
-                    localMessages[msgKey] = payload.data;
-                }
+            // Как только сервер прислал реальный put-ивент, гарантированно сносим все temp_ из памяти
+            clearTempMessages();
+            
+            if (payload.data && payload.data.text) {
+                localMessages[msgKey] = payload.data;
             } else {
-                // Если пришел null — это точечное удаление, стираем один ID
                 delete localMessages[msgKey];
             }
         }
@@ -234,21 +217,19 @@ function startChatSync() {
         const payload = JSON.parse(event.data);
         
         if (payload.data) {
+            // Прилетел живой ответ от сервера: принудительно выжигаем все temp_ копии
+            clearTempMessages();
+
             if (payload.path === "/") {
-                // ПРОВЕРКА НА ДУБЛИКАТЫ ПРИ РЕДАКТИРОВАНИИ
-                // Firebase прислал изменения в корне. Проверяем каждый ключ.
+                // Если прилетело редактирование через корень, обновляем точечно тексты по ключам
                 Object.keys(payload.data).forEach(key => {
                     if (localMessages[key]) {
-                        // Если этот ID уже есть в чате — значит, это РЕДАКТИРОВАНИЕ.
-                        // Меняем ТОЛЬКО текст, не трогая оригинальное время!
                         localMessages[key].text = payload.data[key].text;
                     } else {
-                        // Если ключа не было — это реальное новое сообщение от собеседника
                         localMessages[key] = payload.data[key];
                     }
                 });
             } else {
-                // Если прилетел патч по конкретному пути сообщения (например, путь "/-O3fgh...")
                 const msgKey = payload.path.replace('/', '');
                 if (localMessages[msgKey]) {
                     localMessages[msgKey].text = payload.data.text;
@@ -259,12 +240,8 @@ function startChatSync() {
             renderChat();
         }
     });
-
-    eventSource.onerror = (err) => {
-        console.error("Ошибка потока данных, переподключение...", err);
-    };
 }
-// ОТПРАВКА ИЛИ РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
+
 function sendMessage() {
     const input = document.getElementById('message-input');
     const text = input.value.trim();
@@ -274,14 +251,12 @@ function sendMessage() {
     
     if (editingMessageId) {
         // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
-        // 1. Мгновенно обновляем текст в локальной памяти для плавности
         if (localMessages[editingMessageId]) {
             localMessages[editingMessageId].text = encryptedText;
         }
-        renderChat(); // Мгновенно перерисовываем экран (текст обновится без создания клонов)
-        cancelEdit(); // Очищаем поле ввода и возвращаем стрелочку
+        renderChat();
+        cancelEdit(); 
         
-        // 2. Отправляем обновление на сервер в фоне
         fetch(`${DB_URL}/rooms/${currentRoom}/${editingMessageId}.json`, {
             method: 'PATCH',
             body: JSON.stringify({ 
@@ -291,7 +266,7 @@ function sendMessage() {
             })
         });
     } else {
-        // --- ОБЫЧНАЯ ОТПРАВКА НОВОГО СООБЩЕНИЯ ---
+        // --- ОБЫЧНАЯ ОТПРАВКА ---
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         
@@ -302,10 +277,8 @@ function sendMessage() {
             time: timeStr
         };
 
-        // Вот этот блок temp_ теперь работает СТРОГО для новых сообщений
         const tempKey = 'temp_' + Date.now();
         localMessages[tempKey] = payload;
-        
         renderChat(); 
         input.value = ''; 
         
@@ -320,18 +293,13 @@ function sendMessage() {
     }
 }
 
-
-// Запуск редактирования
 function initEdit(key) {
     const msgObj = localMessages[key];
     if (!msgObj) return;
-    
     editingMessageId = key;
-    
     const input = document.getElementById('message-input');
     input.value = xorDecipher(msgObj.text, decryptedChatKey);
     input.focus();
-    
     document.getElementById('send-button').innerText = "💾";
     input.style.borderColor = "#ffaa00";
 }
@@ -346,14 +314,9 @@ function cancelEdit() {
 
 function deleteMessage(key) {
     if (confirm("Удалить это сообщение для всех?")) {
-        if (localMessages[key]) {
-            delete localMessages[key];
-        }
+        if (localMessages[key]) delete localMessages[key];
         renderChat();
-        
-        fetch(`${DB_URL}/rooms/${currentRoom}/${key}.json`, {
-            method: 'DELETE'
-        });
+        fetch(`${DB_URL}/rooms/${currentRoom}/${key}.json`, { method: 'DELETE' });
     }
 }
 
@@ -375,3 +338,5 @@ function clearChat() {
             });
     }
 }
+
+        
