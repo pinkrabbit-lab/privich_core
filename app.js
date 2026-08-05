@@ -202,44 +202,62 @@ function startChatSync() {
 
     eventSource.addEventListener('put', (event) => {
         const payload = JSON.parse(event.data);
+        
         if (payload.path === "/") {
+            // Первая загрузка комнаты целиком
             localMessages = payload.data || {};
         } else if (payload.path === null || payload.data === null) {
-            localMessages = {};
+            // Полная очистка всей комнаты
+            if (payload.path === "/") localMessages = {};
         } else {
+            // Точечное изменение или точечное УДАЛЕНИЕ одного сообщения (например, по пути /key)
             const msgKey = payload.path.replace('/', '');
+            
             if (payload.data) {
-                localMessages[msgKey] = payload.data;
+                // Если данные прилетели (например, при редактировании)
+                if (payload.data.text) {
+                    // Если сервер прислал только измененный текст, сохраняем автора и время
+                    if (localMessages[msgKey]) {
+                        localMessages[msgKey].text = payload.data.text;
+                    } else {
+                        localMessages[msgKey] = payload.data;
+                    }
+                } else {
+                    localMessages[msgKey] = payload.data;
+                }
             } else {
+                // Если данные НЕ прилетели (payload.data === null) — это точечное УДАЛЕНИЕ!
+                // Стираем из локальной памяти строго это ОДНО сообщение
                 delete localMessages[msgKey];
             }
         }
         renderChat();
     });
 
-    eventSource.addEventListener('put', (event) => {
+    eventSource.addEventListener('patch', (event) => {
         const payload = JSON.parse(event.data);
         
-        if (payload.path === "/") {
-            // Загрузилась вся комната целиком при входе
-            localMessages = payload.data || {};
-        } else if (payload.path === null) {
-            // Базу очистили полностью кнопкой "Очистить экран"
-            localMessages = {};
-        } else {
-            // Изменилось или УДАЛИЛОСЬ конкретное сообщение (например /key)
-            const msgKey = payload.path.replace('/', '');
-            
-            // ВАЖНАЯ СТРОКА: проверяем, что прилетели именно данные сообщения, а не null удаления
-            if (payload.data && (payload.data.text || payload.data.user)) {
-                localMessages[msgKey] = payload.data;
+        if (payload.data) {
+            if (payload.path === "/") {
+                // Если прилетел массив новых сообщений
+                Object.assign(localMessages, payload.data);
             } else {
-                // Если пришел null — стираем ИМЕННО ЭТО ОДНО сообщение из памяти, а не всё!
-                delete localMessages[msgKey];
+                // Если прилетело изменение конкретного сообщения (например, путь "/-O3fgh...")
+                const msgKey = payload.path.replace('/', '');
+                
+                if (localMessages[msgKey]) {
+                    // Если это редактирование существующего сообщения, обновляем только текст!
+                    // Благодаря этому имя автора и его цвет никогда не превратятся в undefined
+                    localMessages[msgKey].text = payload.data.text;
+                } else {
+                    // Если это просто новое сообщение
+                    localMessages[msgKey] = payload.data;
+                }
             }
+            renderChat();
         }
-        renderChat();
     });
+
 
 }
 // ОТПРАВКА ИЛИ РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
