@@ -1,23 +1,19 @@
-// НАСТРОЙКА ПРИВАТНОСТИ
-// Кодовое слово для шифрования (должно быть одинаковым у вас и жены)
 const PASSWORD = "MySuperSecretPassword123"; 
-
-// Прямая ссылка на вашу азиатскую базу Firebase
 const DB_URL = "https://privich-b5b4f-default-rtdb.asia-southeast1.firebasedatabase.app/";
 
 let currentRoom = 'general';
 let chatUsername = 'Аноним';
 let userColor = '#00ff00';
-let eventSource = null; // Переменная для хранения открытого канала связи
+let eventSource = null; 
+// Локальное хранилище сообщений текущей комнаты для плавной отрисовки
+let localMessages = {};
 
-// Палитра ярких неоновых цветов (киберпанк/матрица стиль)
 const NEON_COLORS = [
     'hsl(120, 100%, 60%)', 'hsl(180, 100%, 50%)', 'hsl(200, 100%, 60%)', 
     'hsl(60, 100%, 50%)',  'hsl(36, 100%, 50%)',  'hsl(0, 100%, 60%)',   
     'hsl(280, 100%, 65%)', 'hsl(150, 100%, 55%)'  
 ];
 
-// Улучшенный генератор уникального незанятого цвета
 async function allocateUserColor(room, name) {
     try {
         const res = await fetch(`${DB_URL}/colors/${room}.json`);
@@ -71,7 +67,7 @@ async function joinChat() {
     document.getElementById('chat-screen').classList.add('active');
     
     updateHeaderUI();
-    startChatSync(); // Запускаем умную подписку
+    startChatSync(); 
 }
 
 function updateHeaderUI() {
@@ -87,60 +83,85 @@ async function switchRoom(newRoom) {
     
     userColor = await allocateUserColor(currentRoom, chatUsername);
     updateHeaderUI();
-    startChatSync(); // Переподключаем канал связи на новую комнату
+    startChatSync(); 
 }
 
-// УМНАЯ ПОДПИСКА НА ОБНОВЛЕНИЯ (БЕЗ ТАЙМЕРОВ И ПИНГОВ)
-function startChatSync() {
-    // Если канал уже был открыт (например, при смене комнаты), закрываем старый
-    if (eventSource) {
-        eventSource.close();
+// Рендеринг сообщений из локального хранилища на экран
+function renderChat() {
+    const chatWindow = document.getElementById('chat-window');
+    const isScrolledToBottom = chatWindow.scrollHeight - chatWindow.clientHeight <= chatWindow.scrollTop + 50;
+    
+    chatWindow.innerHTML = '';
+
+    const keys = Object.keys(localMessages);
+    if (keys.length === 0) {
+        chatWindow.innerHTML = '<div class="msg system">История чиста. Начните общение...</div>';
+        return;
     }
 
+    // Сортируем и выводим сообщения на экран
+    keys.forEach(key => {
+        const msgObj = localMessages[key];
+        if (!msgObj || !msgObj.text) return;
+        
+        let decryptedText = xorDecipher(msgObj.text, PASSWORD);
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'msg';
+        msgDiv.innerHTML = `
+            <span style="color: ${msgObj.color}; font-weight: bold;">${msgObj.user}:</span> 
+            <span>${decryptedText}</span>
+            <span class="time">${msgObj.time}</span>
+        `;
+        chatWindow.appendChild(msgDiv);
+    });
+
+    if (isScrolledToBottom) {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+}
+
+// УМНАЯ СИНХРОНИЗАЦИЯ С ОБРАБОТКОЙ ЖИВЫХ ИВЕНТОВ
+function startChatSync() {
+    if (eventSource) eventSource.close();
+    
+    localMessages = {}; // Очищаем старую комнату в памяти
     const chatWindow = document.getElementById('chat-window');
     chatWindow.innerHTML = '<div class="msg system">Подключение к комнате...</div>';
 
-    // Открываем постоянное прямое соединение с базой данных Firebase
-    // Флаг в конце ссылки говорит серверу: держи соединение открытым и присылай ивенты (SSE)
     eventSource = new EventSource(`${DB_URL}/rooms/${currentRoom}.json`, {
         headers: { "Accept": "text/event-stream" }
     });
 
-    // Этот код сработает ТОЛЬКО когда в базе данных изменятся или добавятся сообщения
+    // Ивент 'put' срабатывает при первой загрузке или при полной очистке базы
     eventSource.addEventListener('put', (event) => {
         const payload = JSON.parse(event.data);
         
-        // Запоминаем, был ли скролл внизу
-        const isScrolledToBottom = chatWindow.scrollHeight - chatWindow.clientHeight <= chatWindow.scrollTop + 50;
-        chatWindow.innerHTML = '';
-
-        // Если в комнате вообще нет сообщений
-        if (!payload || !payload.data) {
-            chatWindow.innerHTML = '<div class="msg system">История чиста. Начните общение...</div>';
-            return;
+        if (payload.path === "/") {
+            // Загрузилась вся база данных комнаты целиком
+            localMessages = payload.data || {};
+        } else if (payload.path === null || payload.data === null) {
+            // Базу очистили
+            localMessages = {};
+        } else {
+            // Изменилось конкретное сообщение по пути (например /key)
+            const msgKey = payload.path.replace('/', '');
+            if (payload.data) {
+                localMessages[msgKey] = payload.data;
+            } else {
+                delete localMessages[msgKey];
+            }
         }
+        renderChat();
+    });
 
-        // В зависимости от того, обновилась вся комната или прилетело одно сообщение, Firebase присылает разную структуру
-        const messages = (event.target.url.includes(currentRoom) && payload.path === "/") ? payload.data : payload.data;
+    // Ивент 'patch' срабатывает, когда кто-то отправляет одно НОВОЕ сообщение
+    eventSource.addEventListener('patch', (event) => {
+        const payload = JSON.parse(event.data);
         
-        if (messages) {
-            Object.values(messages).forEach(msgObj => {
-                if (!msgObj || !msgObj.text) return;
-                
-                let decryptedText = xorDecipher(msgObj.text, PASSWORD);
-                const msgDiv = document.createElement('div');
-                msgDiv.className = 'msg';
-                msgDiv.innerHTML = `
-                    <span style="color: ${msgObj.color}; font-weight: bold;">${msgObj.user}:</span> 
-                    <span>${decryptedText}</span>
-                    <span class="time">${msgObj.time}</span>
-                `;
-                chatWindow.appendChild(msgDiv);
-            });
-        }
-
-        if (isScrolledToBottom) {
-            chatWindow.scrollTop = chatWindow.scrollHeight;
+        if (payload.data) {
+            // Добавляем новые сообщения в наше локальное хранилище памяти
+            Object.assign(localMessages, payload.data);
+            renderChat();
         }
     });
 
@@ -165,7 +186,6 @@ function sendMessage() {
         time: timeStr
     };
     
-    // Отправляем сообщение обычным запросом. Поток eventSource сам поймает его и выведет на экран
     fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
         method: 'POST',
         body: JSON.stringify(payload)
@@ -184,6 +204,8 @@ function clearChat() {
         fetch(`${DB_URL}/rooms/${currentRoom}.json`, { method: 'DELETE' })
             .then(() => {
                 fetch(`${DB_URL}/colors/${currentRoom}.json`, { method: 'DELETE' });
+                localMessages = {};
+                renderChat();
             });
     }
 }
