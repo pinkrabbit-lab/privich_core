@@ -301,8 +301,6 @@ function sendMessage() {
 }
 
 function initEdit(key) {
-    // Всплывающее окно для теста: покажет, какой именно ID прилетел при клике
-    console.log("Кликнули на редактирование сообщения с ID:", key);
     
     if (!key || key.startsWith('temp_')) return;
     
