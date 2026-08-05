@@ -219,20 +219,28 @@ function startChatSync() {
 
     eventSource.addEventListener('put', (event) => {
         const payload = JSON.parse(event.data);
+        
         if (payload.path === "/") {
+            // Загрузилась вся комната целиком при входе
             localMessages = payload.data || {};
         } else if (payload.path === null) {
+            // Базу очистили полностью кнопкой "Очистить экран"
             localMessages = {};
         } else {
+            // Изменилось или УДАЛИЛОСЬ конкретное сообщение (например /key)
             const msgKey = payload.path.replace('/', '');
-            if (payload.data && payload.data.text) {
+            
+            // ВАЖНАЯ СТРОКА: проверяем, что прилетели именно данные сообщения, а не null удаления
+            if (payload.data && (payload.data.text || payload.data.user)) {
                 localMessages[msgKey] = payload.data;
             } else {
-                delete localMessages[msgKey]; // Стираем только это одно сообщение
+                // Если пришел null — стираем ИМЕННО ЭТО ОДНО сообщение из памяти, а не всё!
+                delete localMessages[msgKey];
             }
         }
         renderChat();
     });
+
 }
 // ОТПРАВКА ИЛИ РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
 function sendMessage() {
@@ -244,16 +252,19 @@ function sendMessage() {
     
     if (editingMessageId) {
         // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
+        // 1. Мгновенно обновляем текст в локальной памяти для плавности
         if (localMessages[editingMessageId]) {
             localMessages[editingMessageId].text = encryptedText;
         }
-        renderChat(); // Мгновенно перерисовываем экран для себя
+        renderChat(); // Мгновенно перерисовываем экран
         
+        // МГНОВЕННАЯ ОЧИСТКА: убираем лаг ожидания сервера
+        cancelEdit(); 
+        
+        // 2. Отправляем обновление на сервер в фоне
         fetch(`${DB_URL}/rooms/${currentRoom}/${editingMessageId}.json`, {
             method: 'PATCH',
             body: JSON.stringify({ text: encryptedText })
-        }).then(() => {
-            cancelEdit();
         });
     } else {
         // --- ОБЫЧНАЯ ОТПРАВКА ---
