@@ -5,7 +5,7 @@ let currentRoom = 'general';
 let chatUsername = 'Аноним';
 let userColor = '#00ff00';
 let eventSource = null; 
-// Локальное хранилище сообщений текущей комнаты для плавной отрисовки
+
 let localMessages = {};
 
 const NEON_COLORS = [
@@ -86,7 +86,7 @@ async function switchRoom(newRoom) {
     startChatSync(); 
 }
 
-// Рендеринг сообщений из локального хранилища на экран
+// УМНЫЙ ТРЕНДЕРИНГ С ЗАЩИТОЙ ОТ ДВОЕНИЯ
 function renderChat() {
     const chatWindow = document.getElementById('chat-window');
     const isScrolledToBottom = chatWindow.scrollHeight - chatWindow.clientHeight <= chatWindow.scrollTop + 50;
@@ -99,8 +99,26 @@ function renderChat() {
         return;
     }
 
-    // Сортируем и выводим сообщения на экран
-    keys.forEach(key => {
+    // Собираем массив текстов всех реальных (серверных) сообщений от текущего пользователя
+    const serverMessageTexts = keys
+        .filter(key => !key.startsWith('temp_') && localMessages[key]?.user === chatUsername)
+        .map(key => localMessages[key]?.text);
+
+    // Фильтруем ключи, мгновенно удаляя временные дубликаты, которые уже есть на сервере
+    const finalKeys = keys.filter(key => {
+        if (key.startsWith('temp_')) {
+            const tempMsg = localMessages[key];
+            // Если текст этого временного сообщения уже пришел от сервера — удаляем его из памяти
+            if (serverMessageTexts.includes(tempMsg.text)) {
+                delete localMessages[key];
+                return false;
+            }
+        }
+        return true;
+    });
+
+    // Отрисовываем очищенный список
+    finalKeys.forEach(key => {
         const msgObj = localMessages[key];
         if (!msgObj || !msgObj.text) return;
         
@@ -120,11 +138,10 @@ function renderChat() {
     }
 }
 
-// УМНАЯ СИНХРОНИЗАЦИЯ С ОБРАБОТКОЙ ЖИВЫХ ИВЕНТОВ
 function startChatSync() {
     if (eventSource) eventSource.close();
     
-    localMessages = {}; // Очищаем старую комнату в памяти
+    localMessages = {}; 
     const chatWindow = document.getElementById('chat-window');
     chatWindow.innerHTML = '<div class="msg system">Подключение к комнате...</div>';
 
@@ -132,18 +149,13 @@ function startChatSync() {
         headers: { "Accept": "text/event-stream" }
     });
 
-    // Ивент 'put' срабатывает при первой загрузке или при полной очистке базы
     eventSource.addEventListener('put', (event) => {
         const payload = JSON.parse(event.data);
-        
         if (payload.path === "/") {
-            // Загрузилась вся база данных комнаты целиком
             localMessages = payload.data || {};
         } else if (payload.path === null || payload.data === null) {
-            // Базу очистили
             localMessages = {};
         } else {
-            // Изменилось конкретное сообщение по пути (например /key)
             const msgKey = payload.path.replace('/', '');
             if (payload.data) {
                 localMessages[msgKey] = payload.data;
@@ -154,12 +166,9 @@ function startChatSync() {
         renderChat();
     });
 
-    // Ивент 'patch' срабатывает, когда кто-то отправляет одно НОВОЕ сообщение
     eventSource.addEventListener('patch', (event) => {
         const payload = JSON.parse(event.data);
-        
         if (payload.data) {
-            // Добавляем новые сообщения в наше локальное хранилище памяти
             Object.assign(localMessages, payload.data);
             renderChat();
         }
@@ -175,7 +184,6 @@ function sendMessage() {
     const text = input.value.trim();
     if (!text) return;
     
-    // 1. Шифруем текст для сервера
     const encryptedText = xorCipher(text, PASSWORD);
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -187,41 +195,27 @@ function sendMessage() {
         time: timeStr
     };
 
-    // --- ОПТИМИСТИЧНЫЙ ИНТЕРФЕЙС (МГНОВЕННАЯ ЛОКАЛЬНАЯ ОТРИСОВКА) ---
-    // Генерируем временный уникальный ключ для локальной памяти
+    // Создаем оптимистичную локальную копию
     const tempKey = 'temp_' + Date.now();
-    
-    // Записываем сообщение в локальную память ДО отправки на сервер
     localMessages[tempKey] = {
         user: chatUsername,
         color: userColor,
-        text: encryptedText, // Передаем зашифрованный, так как renderChat сам его расшифрует
+        text: encryptedText, 
         time: timeStr
     };
     
-    // Мгновенно перерисовываем экран (пользователь видит сообщение сразу)
-    renderChat();
-    // ---------------------------------------------------------------
+    renderChat(); // Мгновенный вывод на экран
+    input.value = ''; // Сразу очищаем поле ввода для удобства
     
-    // 2. Отправляем данные в базу Firebase
     fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
         method: 'POST',
         body: JSON.stringify(payload)
     })
-    .then(() => {
-        input.value = '';
-        // Удаляем временное сообщение из памяти, так как через секунду 
-        // оно прилетит от сервера как настоящее постоянное сообщение
-        setTimeout(() => {
-            delete localMessages[tempKey];
-            renderChat();
-        }, 1000);
-    })
     .catch(err => {
-        // Если интернет пропал и сообщение не ушло, удаляем его и ругаемся
+        // Если сеть подвела, удаляем временную копию и ругаемся
         delete localMessages[tempKey];
         renderChat();
-        alert("Не удалось отправить сообщение. Проверьте сеть.");
+        alert("Сообщение не ушло. Проверьте связь.");
     });
 }
 
@@ -239,4 +233,5 @@ function clearChat() {
             });
     }
 }
+
 
