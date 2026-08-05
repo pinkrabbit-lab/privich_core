@@ -175,6 +175,7 @@ function sendMessage() {
     const text = input.value.trim();
     if (!text) return;
     
+    // 1. Шифруем текст для сервера
     const encryptedText = xorCipher(text, PASSWORD);
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -185,18 +186,42 @@ function sendMessage() {
         text: encryptedText,
         time: timeStr
     };
+
+    // --- ОПТИМИСТИЧНЫЙ ИНТЕРФЕЙС (МГНОВЕННАЯ ЛОКАЛЬНАЯ ОТРИСОВКА) ---
+    // Генерируем временный уникальный ключ для локальной памяти
+    const tempKey = 'temp_' + Date.now();
     
+    // Записываем сообщение в локальную память ДО отправки на сервер
+    localMessages[tempKey] = {
+        user: chatUsername,
+        color: userColor,
+        text: encryptedText, // Передаем зашифрованный, так как renderChat сам его расшифрует
+        time: timeStr
+    };
+    
+    // Мгновенно перерисовываем экран (пользователь видит сообщение сразу)
+    renderChat();
+    // ---------------------------------------------------------------
+    
+    // 2. Отправляем данные в базу Firebase
     fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
         method: 'POST',
         body: JSON.stringify(payload)
     })
     .then(() => {
         input.value = '';
+        // Удаляем временное сообщение из памяти, так как через секунду 
+        // оно прилетит от сервера как настоящее постоянное сообщение
+        setTimeout(() => {
+            delete localMessages[tempKey];
+        }, 1000);
+    })
+    .catch(err => {
+        // Если интернет пропал и сообщение не ушло, удаляем его и ругаемся
+        delete localMessages[tempKey];
+        renderChat();
+        alert("Не удалось отправить сообщение. Проверьте сеть.");
     });
-}
-
-function handleKeyPress(event) {
-    if (event.key === 'Enter') sendMessage();
 }
 
 function clearChat() {
