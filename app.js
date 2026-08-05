@@ -1,11 +1,10 @@
-const PASSWORD = "MySuperSecretPassword123"; 
 const DB_URL = "https://privich-b5b4f-default-rtdb.asia-southeast1.firebasedatabase.app/";
 
 let currentRoom = 'general';
 let chatUsername = 'Аноним';
 let userColor = '#00ff00';
 let eventSource = null; 
-
+let decryptedChatKey = "";
 let localMessages = {};
 
 const NEON_COLORS = [
@@ -62,7 +61,6 @@ function xorDecipher(hash, key) {
     } catch(e) { return "[Ошибка расшифровки]"; }
 }
 
-// НАДЕЖНАЯ АВТОРИЗАЦИЯ НА ВСТРОЕННЫХ КРИПТО-МЕТОДАХ
 async function joinChat() {
     const nameInput = document.getElementById('username').value.trim();
     const passwordInput = document.getElementById('password').value.trim();
@@ -70,24 +68,35 @@ async function joinChat() {
     if (!nameInput || !passwordInput) return alert('Введите ник и пароль!');
     
     try {
-        // 1. Стучимся в Firebase в защищенную ветку users
-        const res = await fetch(`${DB_URL}/users/${nameInput}.json`);
-        const serverPasswordHash = await res.json();
+        // 1. Проверяем хэш авторизации
+        const resAuth = await fetch(`${DB_URL}/users/${nameInput}.json`);
+        const serverPasswordHash = await resAuth.json();
         
-        // Если в базе вообще нет такого пользователя
-        if (!serverPasswordHash) {
-            return alert('Неверное имя пользователя или пароль');
-        }
+        if (!serverPasswordHash) return alert('Неверное имя пользователя или пароль');
         
-        // 2. Считаем хэш пароля прямо в браузере через системный Web Crypto
         const clientPasswordHash = await sha256(passwordInput);
+        if (clientPasswordHash !== serverPasswordHash) return alert('Неверное имя пользователя или пароль');
         
-        // 3. Сверяем хэши
-        if (clientPasswordHash !== serverPasswordHash) {
-            return alert('Неверное имя пользователя или пароль');
+        // 2. Скачиваем зашифрованный сейф этого пользователя
+        const resVault = await fetch(`${DB_URL}/vaults/${nameInput}.json`);
+        const encryptedVaultData = await resVault.json();
+        
+        if (!encryptedVaultData) {
+            return alert('Сейф ключей не найден в базе данных!');
         }
         
-        // Если всё успешно — пускаем
+        // 3. Открываем сейф с помощью введенного личного пароля
+        decryptedChatKey = xorDecipher(encryptedVaultData, passwordInput);
+        
+        // Проверка успешности открытия сейфа (проверим, содержит ли он маркер "OK_")
+        if (!decryptedChatKey.startsWith("OK_")) {
+            return alert('Ошибка дешифрования ключа чата!');
+        }
+        
+        // Убираем технический маркер и получаем чистый ключ чата
+        decryptedChatKey = decryptedChatKey.replace("OK_", "");
+        
+        // Пускаем в чат
         chatUsername = nameInput;
         currentRoom = 'general';
         
