@@ -1,10 +1,13 @@
-const DB_URL = "https://privich-b5b4f-default-rtdb.asia-southeast1.firebasedatabase.app/";
+const DB_URL = "https://firebasedatabase.app";
 
 let currentRoom = 'general';
 let chatUsername = 'Аноним';
 let userColor = '#00ff00';
 let eventSource = null; 
-let decryptedChatKey = "";
+
+// Сюда чат автоматически положит ключ, когда вы «откроете» свой сейф личным паролем
+let decryptedChatKey = ""; 
+
 let localMessages = {};
 
 const NEON_COLORS = [
@@ -13,7 +16,6 @@ const NEON_COLORS = [
     'hsl(280, 100%, 65%)', 'hsl(150, 100%, 55%)'  
 ];
 
-// Функция генерации SHA-256 хэша силами встроенного движка браузера (без сторонних библиотек)
 async function sha256(string) {
     const utf8 = new TextEncoder().encode(string);
     const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
@@ -61,6 +63,7 @@ function xorDecipher(hash, key) {
     } catch(e) { return "[Ошибка расшифровки]"; }
 }
 
+// ВХОД С АВТОРИЗАЦИЕЙ И ОТКРЫТИЕМ КРИПТО-СЕЙФА
 async function joinChat() {
     const nameInput = document.getElementById('username').value.trim();
     const passwordInput = document.getElementById('password').value.trim();
@@ -78,11 +81,11 @@ async function joinChat() {
         if (clientPasswordHash !== serverPasswordHash) return alert('Неверное имя пользователя или пароль');
         
         // 2. Скачиваем зашифрованный сейф этого пользователя
-        const resVault = await fetch(`${DB_URL}/vault/${nameInput}.json`);
+        const resVault = await fetch(`${DB_URL}/vaults/${nameInput}.json`);
         const encryptedVaultData = await resVault.json();
         
         if (!encryptedVaultData) {
-            return alert('Доступ ограничен, обратитесь к администратору');
+            return alert('Доступ ограничен администратором');
         }
         
         // 3. Открываем сейф с помощью введенного личного пароля
@@ -161,7 +164,7 @@ function renderChat() {
         const msgObj = localMessages[key];
         if (!msgObj || !msgObj.text) return;
         
-        let decryptedText = xorDecipher(msgObj.text, PASSWORD);
+        let decryptedText = xorDecipher(msgObj.text, decryptedChatKey);
         const msgDiv = document.createElement('div');
         msgDiv.className = 'msg';
         msgDiv.innerHTML = `
@@ -223,7 +226,7 @@ function sendMessage() {
     const text = input.value.trim();
     if (!text) return;
     
-    const encryptedText = xorCipher(text, PASSWORD);
+    const encryptedText = xorCipher(text, decryptedChatKey);
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
@@ -274,5 +277,3 @@ function clearChat() {
             });
     }
 }
-
-
