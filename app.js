@@ -156,7 +156,7 @@ function renderChat() {
         
         let decryptedText = xorDecipher(msgObj.text, decryptedChatKey);
         const urlRegex = /(https?:\/\/[^\s]+)/g;
-        let displayText = decryptedText.replace(urlRegex, '<a href="$1" target="_blank" style="color: #3a7ecc; text-decoration: underline;">$1</a>');
+        let displayText = decryptedText.replace(urlRegex, '<a href="$1" target="_blank">$1</a>');
         const msgDiv = document.createElement('div');
         
         if (msgObj.user === chatUsername) {
