@@ -350,7 +350,7 @@ function clearChat() {
     if (confirm('Вы уверены, что хотите полностью стереть переписку в этой вкладке?')) {
         fetch(`${DB_URL}/rooms/${currentBiomePrefix}${currentRoom}.json`, { method: 'DELETE' })
             .then(() => {
-                fetch(`${DB_URL}/colors/${currentRoom}.json`, { method: 'DELETE' });
+                fetch(`${DB_URL}/colors/${currentBiomePrefix}${currentRoom}.json`, { method: 'DELETE' });
                 localMessages = {};
                 renderChat();
             });
