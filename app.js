@@ -23,9 +23,10 @@ async function sha256(string) {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function allocateUserColor(room, name) {
+async function allocateUserColor(name) {
     try {
-        const res = await fetch(`${DB_URL}/colors/${room}.json`);
+        // Запрашиваем цвета глобально для этого биома (вне зависимости от комнат)
+        const res = await fetch(`${DB_URL}/colors/${currentBiomePrefix}.json`);
         const takenColors = await res.json() || {};
         if (takenColors[name]) return takenColors[name];
         
@@ -34,7 +35,9 @@ async function allocateUserColor(room, name) {
         if (availableColors.length === 0) availableColors = NEON_COLORS;
         
         const randomColor = availableColors[Math.floor(Math.random() * availableColors.length)];
-        await fetch(`${DB_URL}/colors/${room}/${name}.json`, {
+        
+        // Сохраняем цвет в глобальную ветку биома
+        await fetch(`${DB_URL}/colors/${currentBiomePrefix}/${name}.json`, {
             method: 'PUT',
             body: JSON.stringify(randomColor)
         });
@@ -43,6 +46,7 @@ async function allocateUserColor(room, name) {
         return NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
     }
 }
+
 
 function xorCipher(text, key) {
     const utf8Text = unescape(encodeURIComponent(text));
@@ -95,7 +99,7 @@ async function joinChat() {
         chatUsername = nameInput;
         currentRoom = 'general';
         
-        userColor = await allocateUserColor(currentRoom, chatUsername);
+        userColor = await allocateUserColor(chatUsername);
         
         document.getElementById('login-screen').classList.remove('active');
         document.getElementById('chat-screen').classList.add('active');
@@ -120,7 +124,6 @@ async function switchRoom(newRoom) {
     if (currentRoom === newRoom) return;
     currentRoom = newRoom;
     cancelEdit();
-    userColor = await allocateUserColor(currentRoom, chatUsername);
     updateHeaderUI();
     startChatSync(); 
 }
@@ -152,6 +155,8 @@ function renderChat() {
         if (!msgObj || !msgObj.text) return;
         
         let decryptedText = xorDecipher(msgObj.text, decryptedChatKey);
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        let displayText = decryptedText.replace(urlRegex, '<a href="$1" target="_blank" style="color: #3a7ecc; text-decoration: underline;">$1</a>');
         const msgDiv = document.createElement('div');
         
         if (msgObj.user === chatUsername) {
@@ -350,7 +355,6 @@ function clearChat() {
     if (confirm('Вы уверены, что хотите полностью стереть переписку в этой вкладке?')) {
         fetch(`${DB_URL}/rooms/${currentBiomePrefix}${currentRoom}.json`, { method: 'DELETE' })
             .then(() => {
-                fetch(`${DB_URL}/colors/${currentBiomePrefix}${currentRoom}.json`, { method: 'DELETE' });
                 localMessages = {};
                 renderChat();
             });
