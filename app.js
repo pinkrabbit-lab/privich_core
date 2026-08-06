@@ -114,7 +114,7 @@ async function joinChat() {
 }
 
 function updateHeaderUI() {
-    document.getElementById('user-info').innerHTML = `Вы: <span style="color: ${userColor}; font-weight:bold;">${chatUsername}</span>`;
+    document.getElementById('user-info').innerHTML = `Вы: <span style="color: ${userColor};">${chatUsername}</span>`;
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active-tab'));
     const activeTab = document.getElementById(`tab-${currentRoom}`);
     if (activeTab) activeTab.classList.add('active-tab');
@@ -155,8 +155,10 @@ function renderChat() {
         if (!msgObj || !msgObj.text) return;
         
         let decryptedText = xorDecipher(msgObj.text, decryptedChatKey);
+        
         const urlRegex = /(https?:\/\/[^\s]+)/g;
         let displayText = decryptedText.replace(urlRegex, '<a href="$1" target="_blank">$1</a>');
+
         const msgDiv = document.createElement('div');
         
         if (msgObj.user === chatUsername) {
@@ -175,17 +177,18 @@ function renderChat() {
             `;
         }
 
-        // Жёсткая защита: если время почему-то undefined, ставим прочерк, но из памяти не стираем
         const displayTime = msgObj.time || "--:--";
 
+        // ИСПРАВЛЕНО: Теперь выводим переменную displayText, чтобы ссылки стали кликабельными
         msgDiv.innerHTML = `
-            <span style="color: ${msgObj.color}; font-weight: bold;">${msgObj.user}:</span> 
-            <span>${decryptedText}</span>
+            <span style="color: ${msgObj.color};">${msgObj.user}:</span> 
+            <span>${displayText}</span>
             <span class="time">${displayTime}</span>
             ${actionsHtml}
         `;
         chatWindow.appendChild(msgDiv);
     });
+
 
     if (isScrolledToBottom) {
         chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -335,6 +338,14 @@ function cancelEdit() {
     document.getElementById('send-button').innerText = "➔";
 }
 
+document.getElementById('message-input').addEventListener('keydown', function(event) {
+    // Проверяем, нажата ли клавиша Escape И идет ли сейчас процесс редактирования
+    if (event.key === 'Escape' && editingMessageId !== null) {
+        event.preventDefault(); // Отменяем стандартное поведение браузера (если оно есть)
+        cancelEdit();           // Вызываем вашу функцию отмены
+    }
+});
+
 function deleteMessage(key) {
     if (confirm("Удалить это сообщение для всех?")) {
         if (localMessages[key]) delete localMessages[key];
@@ -360,5 +371,6 @@ function clearChat() {
             });
     }
 }
+
 
         
