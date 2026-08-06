@@ -8,6 +8,7 @@ let eventSource = null;
 let decryptedChatKey = ""; 
 let localMessages = {};
 let editingMessageId = null; 
+let currentBiomePrefix = "";
 
 const NEON_COLORS = [
     'hsl(120, 100%, 60%)', 'hsl(180, 100%, 50%)', 'hsl(200, 100%, 60%)', 
@@ -84,10 +85,13 @@ async function joinChat() {
         if (!encryptedVaultData) return alert('Сейф ключей не найден в базе данных vault!');
         
         decryptedChatKey = xorDecipher(encryptedVaultData, passwordInput);
-        if (!decryptedChatKey.startsWith("OK_")) return alert('Ошибка дешифрования ключа чата!');
-        
-        decryptedChatKey = decryptedChatKey.replace("OK_", "");
-        
+        const biomeParts = decryptedChatKey.split('_');
+        if (biomeParts.length >= 2) {
+            currentBiomePrefix = biomeParts[0] + "_";
+            decryptedChatKey = biomeParts.slice(1).join('_');
+        } else {
+            return alert('Ошибка дешифрования: сейф поврежден или имеет неверный формат!');
+        }      
         chatUsername = nameInput;
         currentRoom = 'general';
         
@@ -187,7 +191,7 @@ function startChatSync() {
     if (eventSource) eventSource.close();
     localMessages = {}; 
     
-    eventSource = new EventSource(`${DB_URL}/rooms/${currentRoom}.json`, {
+    eventSource = new EventSource(`${DB_URL}/rooms/${currentBiomePrefix}${currentRoom}.json`, {
         headers: { "Accept": "text/event-stream" }
     });
 
@@ -264,7 +268,7 @@ function sendMessage() {
         cancelEdit(); 
         
         // 3. Отправляем обновление на сервер по железно зафиксированному ID
-        fetch(`${DB_URL}/rooms/${currentRoom}/${idToSend}.json`, {
+        fetch(`${DB_URL}/rooms/${currentBiomePrefix}${currentRoom}/${idToSend}.json`, {
             method: 'PATCH',
             body: JSON.stringify({ 
                 text: encryptedText,
@@ -289,7 +293,7 @@ function sendMessage() {
         renderChat(); 
         input.value = ''; 
         
-        fetch(`${DB_URL}/rooms/${currentRoom}.json`, {
+        fetch(`${DB_URL}/rooms/${currentBiomePrefix}${currentRoom}.json`, {
             method: 'POST',
             body: JSON.stringify(payload)
         }).catch(err => {
@@ -330,7 +334,7 @@ function deleteMessage(key) {
     if (confirm("Удалить это сообщение для всех?")) {
         if (localMessages[key]) delete localMessages[key];
         renderChat();
-        fetch(`${DB_URL}/rooms/${currentRoom}/${key}.json`, { method: 'DELETE' });
+        fetch(`${DB_URL}/rooms/${currentBiomePrefix}${currentRoom}/${key}.json`, { method: 'DELETE' });
     }
 }
 
@@ -344,7 +348,7 @@ function handleLoginKeyPress(event) {
 
 function clearChat() {
     if (confirm('Вы уверены, что хотите полностью стереть переписку в этой вкладке?')) {
-        fetch(`${DB_URL}/rooms/${currentRoom}.json`, { method: 'DELETE' })
+        fetch(`${DB_URL}/rooms/${currentBiomePrefix}${currentRoom}.json`, { method: 'DELETE' })
             .then(() => {
                 fetch(`${DB_URL}/colors/${currentRoom}.json`, { method: 'DELETE' });
                 localMessages = {};
