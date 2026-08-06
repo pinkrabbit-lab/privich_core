@@ -8,13 +8,16 @@
     <style>
         /* Базовые настройки страницы */
         html, body { height: 100dvh; margin: 0; padding: 0; background: #0e1621; overflow: hidden; }
-        body { font-family: monospace; color: #f0f0f0; display: flex; justify-content: center; align-items: center; }
-        
-        /* УНИВЕРСАЛЬНЫЙ КОНТЕЙНЕР (Для ПК) */
+        body { font-family: Segoe UI; color: #f0f0f0; display: flex; justify-content: center; align-items: center; }
+        .msg span[style*="font-weight: bold"] {
+            font-family: Segoe UI; /* Можно задать отдельный ретро-шрифт */
+            font-size: 1rem; /* Сделать ник чуть крупнее самого текста сообщения */
+            letter-spacing: 0.05px; /* Слегка раздвинуть буквы в имени */
+        }
         .container { 
             width: 100%; 
             max-width: 800px; 
-            height: 90dvh; /* На ПК чат занимает 90% высоты экрана */
+            height: 90dvh; 
             background: #0e1621; 
             padding: 15px; 
             box-sizing: border-box; 
@@ -90,6 +93,12 @@
             border-radius: 6px; 
             flex-shrink: 0;
             color: #f0f0f0;
+
+            font-family: Segoe UI;   /* Стиль шрифта (monospace, sans-serif, 'Courier New' и т.д.) */
+            font-size: 0.93rem;       /* Размер шрифта (можно увеличивать: 1.1rem, 1.2rem) */
+            line-height: 1.5;         /* Межстрочный интервал (1.4 - 1.6 делает текст очень читаемым) */
+            letter-spacing: 0.01px;    /* Расстояние между буквами (слегка раздвигает текст) */
+            font-weight: 100; 
         }
         .msg.my-msg {
             border-color: transparent;
@@ -101,7 +110,7 @@
         
         /* Кнопочки удаления и редактирования внутри рамки */
         .msg-actions { float: right; margin-left: 10px; font-size: 0.8rem; line-height: 1.5rem; }
-        .action-lnk { color: #535353; margin-left: 5px; cursor: pointer; text-decoration: none; }
+        .action-lnk { color: #808080; margin-left: 5px; cursor: pointer; text-decoration: none; }
         .action-lnk:hover { color: #ff3333; font-weight: bold; }
         .action-lnk.edit-lnk:hover { color: #3a7ecc; }
 
@@ -110,13 +119,23 @@
         .controls input { margin: 0; padding: 12px; flex-grow: 1; border-radius: 4px; }
         
         /* Квадратная кнопка отправки */
-        .send-btn { width: 50px; height: 46px; min-width: 50px; margin: 0; padding: 0; font-size: 1.1rem; background: #224b7a; border-width: 2px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+        .send-btn { width: 50px; height: 46px; min-width: 50px; margin: 0; padding: 0; font-size: 1.1rem; background: #3a7ecc; border-width: 2px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
         
         /* Сервисная кнопка внизу */
         .footer-controls { display: flex; justify-content: flex-start; margin-top: 5px; margin-bottom: 5px; flex-shrink: 0; }
         .clear-btn { width: auto; margin: 0; padding: 4px 8px; font-size: 0.75rem; border-color: #550000; color: #ff3333; background: transparent; border-radius: 4px; }
         .clear-btn:hover { background: #ff3333; color: #182533; border-color: #ff3333; }
 
+        .msg a {
+            color: #77b0ed !important; 
+            text-decoration: none !important;;
+        }
+
+        /* Эффект при наведении мышки на ссылку (для ПК версии) */
+        .msg a:hover {
+            color: #77b0ed !important; 
+            text-decoration: underline !important;;
+        }
         /* УМНЫЙ МЕДИА-ЗАПРОС ДЛЯ СМАРТФОНОВ */
         @media (max-width: 768px) {
             body { padding: 0; align-items: stretch; }
